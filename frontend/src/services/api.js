@@ -115,3 +115,32 @@ export const createSubmission = async ({ problemId, language, sourceCode }) => {
   }
 };
 
+/**
+ * Fetches submission record and judging status by ID GET /api/submissions/:id
+ * @param {number|string} id - Submission ID
+ */
+export const getSubmissionById = async (id) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/submissions/${id}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Submission not found');
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Failed to fetch submission #${id}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`API Error [getSubmissionById ${id}]:`, error);
+    throw error;
+  }
+};
+
+

@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getProblemById, createSubmission } from '../services/api';
+import { getProblemById, createSubmission, getSubmissionById } from '../services/api';
 import ProblemDescription from '../components/ProblemDescription';
 import WorkspaceToolbar from '../components/WorkspaceToolbar';
 import CodeEditor from '../components/CodeEditor';
 import OutputPanel from '../components/OutputPanel';
 import SkeletonLoader from '../components/SkeletonLoader';
 import ErrorState from '../components/ErrorState';
-import { ArrowLeft, Play, Send, RefreshCw, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Play, Send, RefreshCw } from 'lucide-react';
 import './ProblemPage.css';
 
 // Default starter templates
@@ -33,6 +33,17 @@ if __name__ == "__main__":
     main()`,
 };
 
+// Terminal statuses that signal execution is finished
+const TERMINAL_STATUSES = new Set([
+  'ACCEPTED',
+  'WRONG_ANSWER',
+  'COMPILATION_ERROR',
+  'RUNTIME_ERROR',
+  'TIME_LIMIT_EXCEEDED',
+]);
+
+const POLLING_INTERVAL_MS = 1200;
+
 export default function ProblemPage() {
   const { id } = useParams();
 
@@ -45,10 +56,34 @@ export default function ProblemPage() {
   const [language, setLanguage] = useState('java');
   const [codeByLanguage, setCodeByLanguage] = useState(DEFAULT_STARTER_CODES);
 
-  // Execution & Submission States
-  const [executionState, setExecutionState] = useState('idle'); // 'idle' | 'running' | 'submitting' | 'submitted' | 'error'
+  // Execution & Polling States
+  // 'idle' | 'running_notice' | 'submitting' | 'polling' | 'terminal' | 'error'
+  const [executionState, setExecutionState] = useState('idle');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPolling, setIsPolling] = useState(false);
   const [submissionResult, setSubmissionResult] = useState(null);
   const [submissionError, setSubmissionError] = useState(null);
+
+  // Refs for tracking active polling to prevent leaks across unmounts/navigation
+  const pollingTimerRef = useRef(null);
+  const activeSubmissionIdRef = useRef(null);
+  const consecutiveFailuresRef = useRef(0);
+
+  // Helper to safely clear any active polling timer
+  const clearPollingTimer = useCallback(() => {
+    if (pollingTimerRef.current) {
+      clearTimeout(pollingTimerRef.current);
+      pollingTimerRef.current = null;
+    }
+  }, []);
+
+  // Cleanup polling timer when unmounting or changing problems
+  useEffect(() => {
+    return () => {
+      clearPollingTimer();
+      activeSubmissionIdRef.current = null;
+    };
+  }, [clearPollingTimer, id]);
 
   // Load problem details from API
   const fetchProblem = useCallback(async () => {
@@ -78,6 +113,10 @@ export default function ProblemPage() {
 
   // Reset code handler for current language
   const handleResetCode = () => {
+    clearPollingTimer();
+    activeSubmissionIdRef.current = null;
+    setIsPolling(false);
+    setIsSubmitting(false);
     setCodeByLanguage((prev) => ({
       ...prev,
       [language]: DEFAULT_STARTER_CODES[language],
@@ -87,16 +126,89 @@ export default function ProblemPage() {
     setSubmissionError(null);
   };
 
-  // Run button handler
+  // Run button handler (Shows execution notice)
   const handleRunCode = () => {
-    setExecutionState('running');
+    clearPollingTimer();
+    activeSubmissionIdRef.current = null;
+    setIsPolling(false);
+    setExecutionState('running_notice');
     setSubmissionResult(null);
     setSubmissionError(null);
   };
 
-  // Submit button handler (calls POST /api/submissions)
+  // Recursive Polling Logic
+  const startPolling = useCallback(
+    (submissionId) => {
+      clearPollingTimer();
+      activeSubmissionIdRef.current = submissionId;
+      setIsPolling(true);
+      consecutiveFailuresRef.current = 0;
+
+      const poll = async () => {
+        // If the active submission has changed or cleared, bail out
+        if (activeSubmissionIdRef.current !== submissionId) {
+          return;
+        }
+
+        try {
+          const updatedSubmission = await getSubmissionById(submissionId);
+
+          // Verify again before setting state
+          if (activeSubmissionIdRef.current !== submissionId) {
+            return;
+          }
+
+          consecutiveFailuresRef.current = 0;
+          setSubmissionResult(updatedSubmission);
+
+          const status = (updatedSubmission?.status || '').toUpperCase();
+
+          if (TERMINAL_STATUSES.has(status)) {
+            // Reached final state
+            setIsPolling(false);
+            setExecutionState('terminal');
+            activeSubmissionIdRef.current = null;
+          } else {
+            // Still PENDING or RUNNING -> schedule next poll
+            setExecutionState('polling');
+            pollingTimerRef.current = setTimeout(poll, POLLING_INTERVAL_MS);
+          }
+        } catch (err) {
+          if (activeSubmissionIdRef.current !== submissionId) {
+            return;
+          }
+
+          consecutiveFailuresRef.current += 1;
+          console.error(`Polling error for submission #${submissionId}:`, err);
+
+          // If failed 5 times in a row, treat as error
+          if (consecutiveFailuresRef.current >= 5) {
+            setIsPolling(false);
+            setExecutionState('error');
+            setSubmissionError(
+              new Error('Lost connection while polling submission status. Please check backend status.')
+            );
+            activeSubmissionIdRef.current = null;
+          } else {
+            // Retry polling after standard interval
+            pollingTimerRef.current = setTimeout(poll, POLLING_INTERVAL_MS);
+          }
+        }
+      };
+
+      // Kick off the first poll after interval
+      pollingTimerRef.current = setTimeout(poll, POLLING_INTERVAL_MS);
+    },
+    [clearPollingTimer]
+  );
+
+  // Submit button handler (calls POST /api/submissions -> triggers polling)
   const handleSubmitCode = async () => {
-    if (!problem) return;
+    if (!problem || isSubmitting || isPolling) return;
+
+    clearPollingTimer();
+    setIsSubmitting(true);
+    setIsPolling(false);
     setExecutionState('submitting');
     setSubmissionError(null);
     setSubmissionResult(null);
@@ -104,15 +216,27 @@ export default function ProblemPage() {
     const currentCode = codeByLanguage[language];
 
     try {
-      const result = await createSubmission({
+      const initialSubmission = await createSubmission({
         problemId: problem.id,
         language: language,
         sourceCode: currentCode,
       });
 
-      setSubmissionResult(result);
-      setExecutionState('submitted');
+      setSubmissionResult(initialSubmission);
+      setIsSubmitting(false);
+
+      const status = (initialSubmission?.status || '').toUpperCase();
+
+      if (TERMINAL_STATUSES.has(status)) {
+        setExecutionState('terminal');
+      } else {
+        // Start polling for PENDING or RUNNING status
+        setExecutionState('polling');
+        startPolling(initialSubmission.id);
+      }
     } catch (err) {
+      setIsSubmitting(false);
+      setIsPolling(false);
       setSubmissionError(err);
       setExecutionState('error');
     }
@@ -143,6 +267,8 @@ export default function ProblemPage() {
       </div>
     );
   }
+
+  const isActionDisabled = isSubmitting || isPolling;
 
   return (
     <div className="problem-workspace-page">
@@ -177,6 +303,7 @@ export default function ProblemPage() {
               executionState={executionState}
               submissionResult={submissionResult}
               error={submissionError}
+              isPolling={isPolling}
             />
           </div>
         </div>
@@ -195,7 +322,7 @@ export default function ProblemPage() {
           <button
             className="footer-btn run-btn"
             onClick={handleRunCode}
-            disabled={executionState === 'submitting'}
+            disabled={isActionDisabled}
           >
             <Play size={15} />
             <span>Run Code</span>
@@ -204,14 +331,24 @@ export default function ProblemPage() {
           <button
             className="footer-btn submit-btn"
             onClick={handleSubmitCode}
-            disabled={executionState === 'submitting'}
+            disabled={isActionDisabled}
           >
-            {executionState === 'submitting' ? (
-              <RefreshCw size={15} className="spin-icon" />
+            {isSubmitting ? (
+              <>
+                <RefreshCw size={15} className="spin-icon" />
+                <span>Submitting...</span>
+              </>
+            ) : isPolling ? (
+              <>
+                <RefreshCw size={15} className="spin-icon" />
+                <span>Evaluating...</span>
+              </>
             ) : (
-              <Send size={15} />
+              <>
+                <Send size={15} />
+                <span>Submit</span>
+              </>
             )}
-            <span>{executionState === 'submitting' ? 'Submitting...' : 'Submit'}</span>
           </button>
         </div>
       </footer>
