@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 
+const { connectRedis } = require("./config/redis");
 const { connectRabbitMQ } = require("./config/rabbitmq");
 const problemRoutes = require("./routes/problemRoute");
 const submissionRoutes = require("./routes/submissionRoutes");
@@ -24,17 +25,21 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
     try {
-        // Initialize RabbitMQ connection on server startup
+        // 1. Initialize Redis connection
+        await connectRedis();
+
+        // 2. Initialize RabbitMQ connection
         await connectRabbitMQ();
 
+        // 3. Start Express HTTP Server
         app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
         });
     } catch (error) {
         console.error("Failed to initialize server startup:", error.message);
-        // Allow Express server to start anyway if desired, or exit
+        // Fallback startup with graceful service warnings
         app.listen(PORT, () => {
-            console.log(`Server running on port ${PORT} (RabbitMQ disconnected)`);
+            console.log(`Server running on port ${PORT} (Degraded mode: check Redis / RabbitMQ connectivity)`);
         });
     }
 };

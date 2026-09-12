@@ -4,10 +4,11 @@ const {
     createSubmission,
     getSubmissionById
 } = require("../controllers/submissionController");
+const { submissionRateLimiter } = require("../middleware/rateLimiter");
 
 const router = express.Router();
 
-router.post("/", createSubmission);
+router.post("/", submissionRateLimiter, createSubmission);
 
 router.get("/:id", getSubmissionById);
 
