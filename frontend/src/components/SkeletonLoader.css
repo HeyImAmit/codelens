@@ -1,0 +1,90 @@
+/* Skeleton Loader CSS */
+.skeleton-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skeleton-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+}
+
+.skeleton-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  flex: 1;
+}
+
+.skeleton-badge {
+  width: 42px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.skeleton-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.skeleton-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.skeleton-title {
+  width: 180px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-pill {
+  width: 70px;
+  height: 20px;
+  border-radius: var(--radius-full);
+}
+
+.skeleton-desc {
+  width: 85%;
+  height: 16px;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-tags {
+  width: 120px;
+  height: 14px;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-right {
+  margin-left: 24px;
+}
+
+.skeleton-button {
+  width: 90px;
+  height: 38px;
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 640px) {
+  .skeleton-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+  .skeleton-right {
+    margin-left: 0;
+  }
+  .skeleton-button {
+    width: 100%;
+  }
+}

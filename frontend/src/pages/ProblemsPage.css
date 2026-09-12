@@ -1,0 +1,23 @@
+/* Problems Page CSS */
+.problems-page {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 64px);
+  padding-bottom: 64px;
+}
+
+.main-content-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.problems-list-wrapper {
+  margin-top: 12px;
+}
+
+.problems-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

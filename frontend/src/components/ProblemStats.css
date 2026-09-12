@@ -1,0 +1,130 @@
+/* Problem Stats CSS */
+.problem-stats-section {
+  margin-bottom: 32px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.stat-card {
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  position: relative;
+  overflow: hidden;
+  transition: transform var(--transition-normal), border-color var(--transition-normal);
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-medium);
+}
+
+.stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.stat-icon-bg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+}
+
+.stat-icon-bg.total {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent-primary);
+}
+
+.stat-icon-bg.easy {
+  background: var(--diff-easy-bg);
+  color: var(--diff-easy-text);
+}
+
+.stat-icon-bg.medium {
+  background: var(--diff-medium-bg);
+  color: var(--diff-medium-text);
+}
+
+.stat-icon-bg.hard {
+  background: var(--diff-hard-bg);
+  color: var(--diff-hard-text);
+}
+
+.stat-value {
+  font-size: 1.85rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.easy-text {
+  color: var(--diff-easy-text);
+}
+
+.medium-text {
+  color: var(--diff-medium-text);
+}
+
+.hard-text {
+  color: var(--diff-hard-text);
+}
+
+.stat-footer {
+  display: flex;
+  align-items: center;
+}
+
+.stat-subtext {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.stat-progress-pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+}
+
+.stat-progress-pill.easy {
+  background: var(--diff-easy-bg);
+  color: var(--diff-easy-text);
+}
+
+.stat-progress-pill.medium {
+  background: var(--diff-medium-bg);
+  color: var(--diff-medium-text);
+}
+
+.stat-progress-pill.hard {
+  background: var(--diff-hard-bg);
+  color: var(--diff-hard-text);
+}
+
+@media (max-width: 900px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 500px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
