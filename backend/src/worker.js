@@ -1,6 +1,7 @@
 const amqp = require("amqplib");
 require("dotenv").config();
 const pool = require("./config/db");
+const { executeJavaSubmission } = require("./services/execution/javaExecutor");
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://localhost:5672";
 const QUEUE_NAME = "code-execution";
@@ -32,14 +33,12 @@ const startWorker = async () => {
                     data = JSON.parse(content);
                 } catch (parseError) {
                     console.error("Malformed JSON payload in RabbitMQ message:", parseError.message);
-                    // Reject invalid non-JSON payload permanently (do not requeue)
                     channel.nack(msg, false, false);
                     return;
                 }
 
                 if (!data || !data.submissionId) {
                     console.error("Invalid message format (missing submissionId):", data);
-                    // Reject malformed payload permanently (do not requeue)
                     channel.nack(msg, false, false);
                     return;
                 }
@@ -48,7 +47,7 @@ const startWorker = async () => {
                 console.log(`Received submission: ${submissionId}`);
 
                 try {
-                    // Parameterized query to retrieve submission record from PostgreSQL
+                    // Fetch submission record from PostgreSQL
                     const result = await pool.query(
                         `SELECT id, problem_id, language, source_code, status
                          FROM submissions
@@ -58,29 +57,60 @@ const startWorker = async () => {
 
                     if (result.rows.length === 0) {
                         console.warn(`Submission not found: ${submissionId}`);
-                        // Permanent invalid submission ID: NACK without requeueing
                         channel.nack(msg, false, false);
                         return;
                     }
 
                     const submission = result.rows[0];
 
-                    console.log("Submission retrieved:");
-                    console.log(`  ID: ${submission.id}`);
-                    console.log(`  Problem: ${submission.problem_id}`);
-                    console.log(`  Language: ${submission.language}`);
-                    console.log(`  Status: ${submission.status}`);
+                    console.log(`Language: ${submission.language}`);
+                    console.log(`Status: PENDING`);
 
-                    // Successfully processed job -> ACK message
+                    // Check supported language for Milestone 3C (Java)
+                    const lang = String(submission.language).toLowerCase();
+                    if (lang !== "java") {
+                        console.warn(`Language '${submission.language}' execution is not supported in Milestone 3C.`);
+                        channel.nack(msg, false, false);
+                        return;
+                    }
+
+                    // Transition status: PENDING -> RUNNING
+                    await pool.query(
+                        `UPDATE submissions SET status = 'RUNNING' WHERE id = $1`,
+                        [submissionId]
+                    );
+                    console.log(`Execution started for submission ${submissionId}`);
+
+                    // Execute Java code inside isolated Docker sandbox
+                    const execResult = await executeJavaSubmission(submission.source_code);
+
+                    // Update PostgreSQL record with execution metrics and status
+                    await pool.query(
+                        `UPDATE submissions
+                         SET status = $1, output = $2, error = $3, execution_time = $4
+                         WHERE id = $5`,
+                        [
+                            execResult.status,
+                            execResult.output,
+                            execResult.error,
+                            execResult.executionTime,
+                            submissionId
+                        ]
+                    );
+
+                    console.log(`Execution completed for submission ${submissionId}`);
+                    console.log(`  Final Status: ${execResult.status}`);
+                    console.log(`  Execution Time: ${execResult.executionTime} ms`);
+
+                    // Acknowledge RabbitMQ message after database update
                     channel.ack(msg);
                 } catch (dbError) {
-                    console.error(`Database error retrieving submission ${submissionId}:`, dbError.message);
-                    // Transient infrastructure failure -> NACK with requeue enabled
+                    console.error(`Error processing execution for submission ${submissionId}:`, dbError.message);
                     channel.nack(msg, false, true);
                 }
             },
             {
-                noAck: false // Explicit acknowledgements required
+                noAck: false
             }
         );
 
@@ -102,12 +132,8 @@ const startWorker = async () => {
 const handleShutdown = async (signal) => {
     console.log(`\nReceived ${signal}. Shutting down worker cleanly...`);
     try {
-        if (channel) {
-            await channel.close();
-        }
-        if (connection) {
-            await connection.close();
-        }
+        if (channel) await channel.close();
+        if (connection) await connection.close();
         await pool.end();
         console.log("Worker cleanup complete. Exiting.");
         process.exit(0);
