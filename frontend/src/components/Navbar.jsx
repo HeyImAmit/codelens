@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Terminal, Sparkles, Menu, X, BookOpen, Clock, User, Code2 } from 'lucide-react';
+import { Terminal, Menu, X, BookOpen, Clock, User, Code2 } from 'lucide-react';
 import './Navbar.css';
 
 export default function Navbar() {
@@ -10,13 +10,12 @@ export default function Navbar() {
   const isProblemsActive = location.pathname === '/' || location.pathname.startsWith('/problems');
 
   return (
-    <header className="navbar-header glass-panel">
+    <header className="navbar-header">
       <div className="container navbar-container">
         {/* Brand / Logo */}
         <Link to="/" className="navbar-brand">
           <div className="brand-icon-wrapper">
-            <Code2 className="brand-icon" size={20} />
-            <Sparkles className="brand-sparkle" size={12} />
+            <Code2 className="brand-icon" size={18} />
           </div>
           <span className="brand-name">
             Code<span className="brand-highlight">Lens</span>
@@ -29,33 +28,32 @@ export default function Navbar() {
             to="/problems"
             className={`nav-link ${isProblemsActive ? 'active' : ''}`}
           >
-            <Terminal size={16} />
+            <Terminal size={15} />
             <span>Problems</span>
           </Link>
 
-          <div className="nav-link disabled-link" title="Learn platform coming in future milestone">
-            <BookOpen size={16} />
+          <div className="nav-link disabled-link" title="Curriculum coming soon">
+            <BookOpen size={15} />
             <span>Learn</span>
             <span className="nav-tag">Soon</span>
           </div>
 
-          <div className="nav-link disabled-link" title="Submissions history coming in future milestone">
-            <Clock size={16} />
+          <div className="nav-link disabled-link" title="Submissions history coming soon">
+            <Clock size={15} />
             <span>Submissions</span>
             <span className="nav-tag">Soon</span>
           </div>
         </nav>
 
-        {/* Right Section: AI Status & User Profile */}
+        {/* Right Section: Sandbox & Profile */}
         <div className="navbar-right desktop-only">
-          <div className="ai-status-badge" title="AI Review Engine ready">
-            <span className="ai-status-dot"></span>
-            <Sparkles size={13} className="ai-badge-icon" />
-            <span className="ai-status-text">AI Review</span>
+          <div className="engine-status-pill" title="Execution engine active">
+            <span className="status-dot"></span>
+            <span className="status-text">Docker Sandbox</span>
           </div>
 
           <div className="user-avatar" title="User Profile">
-            <User size={18} />
+            <User size={15} />
           </div>
         </div>
 
@@ -65,41 +63,40 @@ export default function Navbar() {
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           aria-label="Toggle navigation menu"
         >
-          {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+          {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
       </div>
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="mobile-menu glass-panel mobile-only">
+        <div className="mobile-menu mobile-only">
           <nav className="mobile-nav-links">
             <Link
               to="/problems"
               className={`mobile-nav-link ${isProblemsActive ? 'active' : ''}`}
               onClick={() => setMobileMenuOpen(false)}
             >
-              <Terminal size={18} />
+              <Terminal size={16} />
               <span>Problems</span>
             </Link>
 
             <div className="mobile-nav-link disabled-link">
-              <BookOpen size={18} />
+              <BookOpen size={16} />
               <span>Learn</span>
               <span className="nav-tag">Soon</span>
             </div>
 
             <div className="mobile-nav-link disabled-link">
-              <Clock size={18} />
+              <Clock size={16} />
               <span>Submissions</span>
               <span className="nav-tag">Soon</span>
             </div>
           </nav>
 
           <div className="mobile-nav-footer">
-            <div className="ai-status-badge">
-              <span className="ai-status-dot"></span>
-              <Sparkles size={14} className="ai-badge-icon" />
-              <span>AI Code Review • Active</span>
+            <div className="engine-status-pill">
+              <span className="status-dot"></span>
+              <span>Docker Sandbox Active</span>
             </div>
           </div>
         </div>

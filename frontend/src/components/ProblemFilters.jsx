@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, X, Filter, SlidersHorizontal, RotateCcw } from 'lucide-react';
+import { Search, X, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import './ProblemFilters.css';
 
 export default function ProblemFilters({
@@ -32,49 +32,48 @@ export default function ProblemFilters({
   const isFiltered = searchQuery.trim() !== '' || selectedDifficulty !== 'ALL' || selectedTopic !== 'All Topics';
 
   return (
-    <div className="problem-filters-container">
-      {/* Header Section */}
+    <div className="problem-filters-section">
+      {/* Section Header */}
       <div className="filters-header">
-        <div>
-          <h2 className="section-title">Problems</h2>
-          <p className="section-subtitle">
-            Choose a problem and start solving with AI assistance.
-          </p>
-        </div>
-        <div className="results-badge glass-panel">
-          Showing <span className="highlight-count">{filteredCount}</span> of {totalCount}
+        <div className="filters-header-title">
+          <h2>Problems Catalog</h2>
+          <span className="count-tag">
+            {filteredCount} {filteredCount === 1 ? 'problem' : 'problems'}
+            {isFiltered && <span className="total-indicator"> (of {totalCount})</span>}
+          </span>
         </div>
       </div>
 
       {/* Filter Controls Row */}
-      <div className="controls-row">
+      <div className="filters-controls-row">
         {/* Search Bar */}
-        <div className="search-box-wrapper glass-panel">
-          <Search size={18} className="search-icon" />
+        <div className="filter-control search-wrapper">
+          <Search size={15} className="search-icon" />
           <input
             type="text"
             className="search-input"
-            placeholder="Search problems by title or keyword..."
+            placeholder="Search problems..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search problems by title or keyword"
           />
           {searchQuery && (
             <button
               className="clear-search-btn"
               onClick={() => setSearchQuery('')}
-              aria-label="Clear search"
+              aria-label="Clear search input"
             >
-              <X size={16} />
+              <X size={14} />
             </button>
           )}
         </div>
 
         {/* Difficulty Filter Tabs */}
-        <div className="difficulty-tabs glass-panel">
+        <div className="filter-control difficulty-tabs" role="group" aria-label="Filter by difficulty">
           {difficulties.map((diff) => (
             <button
               key={diff.value}
-              className={`diff-tab ${selectedDifficulty === diff.value ? 'active' : ''} ${diff.value.toLowerCase()}`}
+              className={`diff-tab-btn ${selectedDifficulty === diff.value ? 'active' : ''} ${diff.value.toLowerCase()}`}
               onClick={() => setSelectedDifficulty(diff.value)}
             >
               {diff.label}
@@ -83,12 +82,13 @@ export default function ProblemFilters({
         </div>
 
         {/* Topic Filter Dropdown */}
-        <div className="topic-select-wrapper glass-panel">
-          <SlidersHorizontal size={15} className="topic-icon" />
+        <div className="filter-control topic-wrapper">
+          <SlidersHorizontal size={14} className="topic-icon" />
           <select
             className="topic-select"
             value={selectedTopic}
             onChange={(e) => setSelectedTopic(e.target.value)}
+            aria-label="Filter by topic"
           >
             {topics.map((t) => (
               <option key={t} value={t}>
@@ -98,14 +98,15 @@ export default function ProblemFilters({
           </select>
         </div>
 
-        {/* Reset Button (only shown if filters active) */}
+        {/* Reset Button */}
         {isFiltered && (
           <button
-            className="reset-filters-btn"
+            className="filter-reset-btn"
             onClick={onResetFilters}
-            title="Reset filters"
+            title="Reset active filters"
+            aria-label="Reset all filters"
           >
-            <RotateCcw size={15} />
+            <RotateCcw size={13} />
             <span>Reset</span>
           </button>
         )}

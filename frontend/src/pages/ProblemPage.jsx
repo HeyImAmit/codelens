@@ -5,9 +5,10 @@ import ProblemDescription from '../components/ProblemDescription';
 import WorkspaceToolbar from '../components/WorkspaceToolbar';
 import CodeEditor from '../components/CodeEditor';
 import OutputPanel from '../components/OutputPanel';
+import CodeLensAnalysisPanel from '../components/CodeLensAnalysisPanel';
 import SkeletonLoader from '../components/SkeletonLoader';
 import ErrorState from '../components/ErrorState';
-import { ArrowLeft, Play, Send, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Terminal, Sparkles } from 'lucide-react';
 import './ProblemPage.css';
 
 // Default starter templates
@@ -56,15 +57,19 @@ export default function ProblemPage() {
   const [language, setLanguage] = useState('java');
   const [codeByLanguage, setCodeByLanguage] = useState(DEFAULT_STARTER_CODES);
 
+  // Bottom Workspace Tab: 'output' | 'analysis'
+  const [bottomTab, setBottomTab] = useState('output');
+
   // Execution & Polling States
-  // 'idle' | 'running_notice' | 'submitting' | 'polling' | 'terminal' | 'error'
+  // 'idle' | 'running' | 'polling' | 'terminal' | 'error'
   const [executionState, setExecutionState] = useState('idle');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [executionMode, setExecutionMode] = useState('submit'); // 'run' | 'submit'
+  const [isExecuting, setIsExecuting] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
   const [submissionResult, setSubmissionResult] = useState(null);
   const [submissionError, setSubmissionError] = useState(null);
 
-  // Refs for tracking active polling to prevent leaks across unmounts/navigation
+  // Refs for tracking active polling to prevent memory leaks across unmounts/navigation
   const pollingTimerRef = useRef(null);
   const activeSubmissionIdRef = useRef(null);
   const consecutiveFailuresRef = useRef(0);
@@ -116,7 +121,7 @@ export default function ProblemPage() {
     clearPollingTimer();
     activeSubmissionIdRef.current = null;
     setIsPolling(false);
-    setIsSubmitting(false);
+    setIsExecuting(false);
     setCodeByLanguage((prev) => ({
       ...prev,
       [language]: DEFAULT_STARTER_CODES[language],
@@ -126,17 +131,7 @@ export default function ProblemPage() {
     setSubmissionError(null);
   };
 
-  // Run button handler (Shows execution notice)
-  const handleRunCode = () => {
-    clearPollingTimer();
-    activeSubmissionIdRef.current = null;
-    setIsPolling(false);
-    setExecutionState('running_notice');
-    setSubmissionResult(null);
-    setSubmissionError(null);
-  };
-
-  // Recursive Polling Logic
+  // Polling Engine
   const startPolling = useCallback(
     (submissionId) => {
       clearPollingTimer();
@@ -145,7 +140,6 @@ export default function ProblemPage() {
       consecutiveFailuresRef.current = 0;
 
       const poll = async () => {
-        // If the active submission has changed or cleared, bail out
         if (activeSubmissionIdRef.current !== submissionId) {
           return;
         }
@@ -153,7 +147,6 @@ export default function ProblemPage() {
         try {
           const updatedSubmission = await getSubmissionById(submissionId);
 
-          // Verify again before setting state
           if (activeSubmissionIdRef.current !== submissionId) {
             return;
           }
@@ -164,12 +157,13 @@ export default function ProblemPage() {
           const status = (updatedSubmission?.status || '').toUpperCase();
 
           if (TERMINAL_STATUSES.has(status)) {
-            // Reached final state
+            // Finished
             setIsPolling(false);
+            setIsExecuting(false);
             setExecutionState('terminal');
             activeSubmissionIdRef.current = null;
           } else {
-            // Still PENDING or RUNNING -> schedule next poll
+            // Still in progress
             setExecutionState('polling');
             pollingTimerRef.current = setTimeout(poll, POLLING_INTERVAL_MS);
           }
@@ -181,37 +175,37 @@ export default function ProblemPage() {
           consecutiveFailuresRef.current += 1;
           console.error(`Polling error for submission #${submissionId}:`, err);
 
-          // If failed 5 times in a row, treat as error
           if (consecutiveFailuresRef.current >= 5) {
             setIsPolling(false);
+            setIsExecuting(false);
             setExecutionState('error');
             setSubmissionError(
-              new Error('Lost connection while polling submission status. Please check backend status.')
+              new Error('Lost connection while polling execution status. Please check backend connection.')
             );
             activeSubmissionIdRef.current = null;
           } else {
-            // Retry polling after standard interval
             pollingTimerRef.current = setTimeout(poll, POLLING_INTERVAL_MS);
           }
         }
       };
 
-      // Kick off the first poll after interval
       pollingTimerRef.current = setTimeout(poll, POLLING_INTERVAL_MS);
     },
     [clearPollingTimer]
   );
 
-  // Submit button handler (calls POST /api/submissions -> triggers polling)
-  const handleSubmitCode = async () => {
-    if (!problem || isSubmitting || isPolling) return;
+  // Common Execution Trigger (handles both 'run' and 'submit' flows)
+  const triggerExecution = async (mode) => {
+    if (!problem || isExecuting || isPolling) return;
 
     clearPollingTimer();
-    setIsSubmitting(true);
+    setExecutionMode(mode);
+    setIsExecuting(true);
     setIsPolling(false);
-    setExecutionState('submitting');
+    setExecutionState('running');
     setSubmissionError(null);
     setSubmissionResult(null);
+    setBottomTab('output'); // Auto switch to output tab on execution
 
     const currentCode = codeByLanguage[language];
 
@@ -223,19 +217,18 @@ export default function ProblemPage() {
       });
 
       setSubmissionResult(initialSubmission);
-      setIsSubmitting(false);
 
       const status = (initialSubmission?.status || '').toUpperCase();
 
       if (TERMINAL_STATUSES.has(status)) {
+        setIsExecuting(false);
         setExecutionState('terminal');
       } else {
-        // Start polling for PENDING or RUNNING status
         setExecutionState('polling');
         startPolling(initialSubmission.id);
       }
     } catch (err) {
-      setIsSubmitting(false);
+      setIsExecuting(false);
       setIsPolling(false);
       setSubmissionError(err);
       setExecutionState('error');
@@ -259,7 +252,7 @@ export default function ProblemPage() {
       <div className="problem-workspace-page">
         <div className="container workspace-error-container">
           <Link to="/problems" className="back-link">
-            <ArrowLeft size={16} />
+            <ArrowLeft size={15} />
             <span>Back to Problems</span>
           </Link>
           <ErrorState error={error} onRetry={fetchProblem} />
@@ -268,27 +261,42 @@ export default function ProblemPage() {
     );
   }
 
-  const isActionDisabled = isSubmitting || isPolling;
-
   return (
     <div className="problem-workspace-page">
-      {/* Workspace Grid Layout */}
-      <div className="workspace-main-container">
+      {/* Top Breadcrumb Header */}
+      <header className="workspace-subnav">
+        <div className="subnav-left">
+          <Link to="/problems" className="back-nav-btn" title="Back to problem catalog">
+            <ArrowLeft size={14} />
+            <span>Problems</span>
+          </Link>
+          <span className="subnav-divider">/</span>
+          <span className="subnav-title">{problem.title}</span>
+        </div>
+      </header>
+
+      {/* Main Workspace Split Layout */}
+      <div className="workspace-main-layout">
         {/* Left Pane: Problem Description */}
-        <div className="workspace-pane left-pane">
+        <div className="workspace-pane left-description-pane">
           <ProblemDescription problem={problem} />
         </div>
 
-        {/* Right Pane: Editor & Output */}
-        <div className="workspace-pane right-pane">
-          {/* Editor Top Section */}
-          <div className="editor-container glass-panel">
+        {/* Right Pane: Editor & Output/Analysis */}
+        <div className="workspace-pane right-editor-pane">
+          {/* Top Section: Editor Container */}
+          <div className="editor-panel-box">
             <WorkspaceToolbar
               language={language}
               onLanguageChange={setLanguage}
               onResetCode={handleResetCode}
+              onRunCode={() => triggerExecution('run')}
+              onSubmitCode={() => triggerExecution('submit')}
+              isExecuting={isExecuting || isPolling}
+              executionMode={executionMode}
+              lastVerdict={submissionResult?.status}
             />
-            <div className="editor-body">
+            <div className="editor-panel-body">
               <CodeEditor
                 language={language}
                 code={codeByLanguage[language]}
@@ -297,61 +305,46 @@ export default function ProblemPage() {
             </div>
           </div>
 
-          {/* Bottom Section: Output / Test Cases Panel */}
-          <div className="output-container glass-panel">
-            <OutputPanel
-              executionState={executionState}
-              submissionResult={submissionResult}
-              error={submissionError}
-              isPolling={isPolling}
-            />
+          {/* Bottom Section: Tabbed Output / CodeLens Analysis */}
+          <div className="bottom-panel-box">
+            {/* Bottom Tab Switcher */}
+            <div className="bottom-panel-nav">
+              <button
+                className={`bottom-tab-btn ${bottomTab === 'output' ? 'active' : ''}`}
+                onClick={() => setBottomTab('output')}
+              >
+                <Terminal size={13} />
+                <span>Execution Output</span>
+              </button>
+              <button
+                className={`bottom-tab-btn ${bottomTab === 'analysis' ? 'active' : ''}`}
+                onClick={() => setBottomTab('analysis')}
+              >
+                <Sparkles size={13} />
+                <span>CodeLens Analysis</span>
+              </button>
+            </div>
+
+            {/* Bottom Panel Views */}
+            <div className="bottom-panel-content">
+              {bottomTab === 'output' ? (
+                <OutputPanel
+                  executionState={executionState}
+                  executionMode={executionMode}
+                  submissionResult={submissionResult}
+                  error={submissionError}
+                  isPolling={isPolling}
+                />
+              ) : (
+                <CodeLensAnalysisPanel
+                  submissionResult={submissionResult}
+                  isEvaluating={isPolling || executionState === 'running'}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Footer Navigation & Action Bar */}
-      <footer className="workspace-footer glass-panel">
-        <div className="footer-left">
-          <Link to="/problems" className="footer-back-link">
-            <ArrowLeft size={16} />
-            <span>Back to Problems</span>
-          </Link>
-        </div>
-
-        <div className="footer-actions">
-          <button
-            className="footer-btn run-btn"
-            onClick={handleRunCode}
-            disabled={isActionDisabled}
-          >
-            <Play size={15} />
-            <span>Run Code</span>
-          </button>
-
-          <button
-            className="footer-btn submit-btn"
-            onClick={handleSubmitCode}
-            disabled={isActionDisabled}
-          >
-            {isSubmitting ? (
-              <>
-                <RefreshCw size={15} className="spin-icon" />
-                <span>Submitting...</span>
-              </>
-            ) : isPolling ? (
-              <>
-                <RefreshCw size={15} className="spin-icon" />
-                <span>Evaluating...</span>
-              </>
-            ) : (
-              <>
-                <Send size={15} />
-                <span>Submit</span>
-              </>
-            )}
-          </button>
-        </div>
-      </footer>
     </div>
   );
 }

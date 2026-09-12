@@ -1,43 +1,38 @@
 import React from 'react';
-import { Sparkles, Code, Cpu, Zap } from 'lucide-react';
+import { Terminal, Cpu, ShieldCheck } from 'lucide-react';
 import './HeroHeader.css';
 
 export default function HeroHeader() {
   return (
     <section className="hero-header">
-      <div className="hero-glow-backdrop" aria-hidden="true" />
       <div className="container hero-container">
-        {/* Top Status Pill */}
-        <div className="hero-status-pill">
-          <Sparkles size={14} className="hero-pill-icon" />
-          <span>AI-Powered Practice Workspace</span>
-          <span className="hero-pill-divider">•</span>
-          <span className="hero-pill-highlight">Next-Gen DSA</span>
-        </div>
-
-        {/* Hero Title */}
-        <h1 className="hero-title">
-          Sharpen your <span className="text-gradient">DSA skills</span>.
-        </h1>
-
-        {/* Hero Subtitle */}
-        <p className="hero-subtitle">
-          Practice curated problems, analyze algorithmic efficiency, and elevate your code quality with instant, AI-powered feedback.
-        </p>
-
-        {/* Feature Badges */}
-        <div className="hero-tags">
-          <div className="hero-tag">
-            <Code size={14} />
-            <span>Interactive Editor</span>
+        <div className="hero-content">
+          <div className="hero-badge">
+            <span className="hero-badge-dot" />
+            <span>Interactive Algorithmic Workspace</span>
           </div>
-          <div className="hero-tag">
-            <Cpu size={14} />
-            <span>Sandbox Execution</span>
-          </div>
-          <div className="hero-tag">
-            <Zap size={14} />
-            <span>AI Feedback</span>
+
+          <h1 className="hero-title">
+            Practice. Execute. Refine.
+          </h1>
+
+          <p className="hero-subtitle">
+            Solve curated Data Structures & Algorithms problems with real-time sandbox execution and performance analysis.
+          </p>
+
+          <div className="hero-features">
+            <div className="feature-item">
+              <Terminal size={14} className="feature-icon" />
+              <span>Monaco IDE</span>
+            </div>
+            <div className="feature-item">
+              <Cpu size={14} className="feature-icon" />
+              <span>Docker Isolated Judge</span>
+            </div>
+            <div className="feature-item">
+              <ShieldCheck size={14} className="feature-icon" />
+              <span>Automated Test Evaluation</span>
+            </div>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, AlertTriangle, Zap, FileText, Code2, ListChecks, HelpCircle } from 'lucide-react';
+import { FileText, Code2, ListChecks, HelpCircle } from 'lucide-react';
 import './ProblemDescription.css';
 
 export default function ProblemDescription({ problem }) {
@@ -7,23 +7,16 @@ export default function ProblemDescription({ problem }) {
 
   const diffLower = String(problem.difficulty).toLowerCase();
 
-  const getDifficultyIcon = () => {
-    if (diffLower === 'easy') return <CheckCircle2 size={13} />;
-    if (diffLower === 'medium') return <AlertTriangle size={13} />;
-    return <Zap size={13} />;
-  };
-
   return (
     <div className="problem-description-panel">
       {/* Header Info */}
       <div className="description-header">
-        <div className="title-badge-group">
+        <div className="title-group">
           <span className="problem-id-tag">#{problem.id}</span>
           <h2 className="problem-panel-title">{problem.title}</h2>
         </div>
-        <span className={`difficulty-badge ${diffLower}`}>
-          {getDifficultyIcon()}
-          <span>{problem.difficulty}</span>
+        <span className={`diff-badge ${diffLower}`}>
+          {problem.difficulty}
         </span>
       </div>
 
@@ -32,7 +25,7 @@ export default function ProblemDescription({ problem }) {
         {/* Main Problem Statement */}
         <section className="desc-section">
           <div className="section-heading">
-            <FileText size={16} />
+            <FileText size={14} />
             <h3>Description</h3>
           </div>
           <div className="problem-statement-text">
@@ -44,10 +37,10 @@ export default function ProblemDescription({ problem }) {
         {problem.input_format && (
           <section className="desc-section">
             <div className="section-heading">
-              <Code2 size={16} />
+              <Code2 size={14} />
               <h3>Input Format</h3>
             </div>
-            <div className="format-box">
+            <div className="code-spec-box">
               <code>{problem.input_format}</code>
             </div>
           </section>
@@ -57,10 +50,10 @@ export default function ProblemDescription({ problem }) {
         {problem.output_format && (
           <section className="desc-section">
             <div className="section-heading">
-              <Code2 size={16} />
+              <Code2 size={14} />
               <h3>Output Format</h3>
             </div>
-            <div className="format-box">
+            <div className="code-spec-box">
               <code>{problem.output_format}</code>
             </div>
           </section>
@@ -70,21 +63,21 @@ export default function ProblemDescription({ problem }) {
         {problem.constraints && (
           <section className="desc-section">
             <div className="section-heading">
-              <ListChecks size={16} />
+              <ListChecks size={14} />
               <h3>Constraints</h3>
             </div>
-            <div className="constraints-box">
+            <div className="code-spec-box">
               <code>{problem.constraints}</code>
             </div>
           </section>
         )}
 
-        {/* AI Practice Hint Footer */}
-        <div className="ai-hint-callout">
-          <HelpCircle size={16} className="hint-icon" />
+        {/* Practice Callout */}
+        <div className="workspace-guidance-callout">
+          <HelpCircle size={15} className="callout-icon" />
           <div>
-            <strong>AI Feedback Engine</strong>
-            <p>Write your solution in the editor and submit. Detailed time/space complexity analysis & hints will evaluate after execution.</p>
+            <strong>Automated Evaluation</strong>
+            <p>Test with <strong>Run Code</strong> against sample cases or <strong>Submit</strong> to evaluate against all judging test cases in Docker.</p>
           </div>
         </div>
       </div>

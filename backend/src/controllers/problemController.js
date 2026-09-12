@@ -16,7 +16,7 @@ const getAllProblems = async (req, res) => {
 
         // 2. Fallback / Cache Miss: Query PostgreSQL
         const result = await pool.query(
-            `SELECT id, title, difficulty, description
+            `SELECT id, title, difficulty, description, topic, expected_time_complexity, expected_space_complexity
              FROM problems
              ORDER BY id`
         );

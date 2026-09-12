@@ -1,23 +1,85 @@
-/* Problem Page Workspace CSS */
+/* Problem Workspace Page CSS */
 .problem-workspace-page {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 64px);
+  height: calc(100vh - 52px);
   overflow: hidden;
   background: var(--bg-dark);
 }
 
-.workspace-loading-container, .workspace-error-container {
-  padding-top: 40px;
+.workspace-loading-container,
+.workspace-error-container {
+  padding-top: 32px;
 }
 
-/* Main Grid Layout */
-.workspace-main-container {
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  transition: color var(--transition-fast);
+}
+
+.back-link:hover {
+  color: var(--text-primary);
+}
+
+/* Subnav Breadcrumbs */
+.workspace-subnav {
+  height: 36px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-dark);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.subnav-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.back-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-weight: 500;
+  transition: color var(--transition-fast);
+}
+
+.back-nav-btn:hover {
+  color: var(--text-primary);
+}
+
+.subnav-divider {
+  color: var(--text-dim);
+}
+
+.subnav-title {
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+/* Main Split Layout */
+.workspace-main-layout {
   display: grid;
-  grid-template-columns: 45% 55%;
-  gap: 12px;
+  grid-template-columns: 42% 58%;
+  gap: 8px;
   flex: 1;
-  padding: 12px;
+  min-height: 0;
+  padding: 8px;
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -26,149 +88,137 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
-/* Right Pane Split (Editor + Output) */
-.right-pane {
-  gap: 12px;
+/* Left Description Pane */
+.left-description-pane {
+  min-height: 0;
 }
 
-.editor-container {
+/* Right Editor & Results Pane */
+.right-editor-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+/* Editor Panel Box */
+.editor-panel-box {
   display: flex;
   flex-direction: column;
   flex: 6;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+  min-height: 220px;
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  min-height: 280px;
-}
-
-.editor-body {
-  flex: 1;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
-.output-container {
+.editor-panel-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Bottom Panel Box (Output & Analysis) */
+.bottom-panel-box {
   display: flex;
   flex-direction: column;
   flex: 4;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
   min-height: 180px;
-}
-
-/* Footer Navigation Bar */
-.workspace-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 24px;
-  height: 56px;
-  border-top: 1px solid var(--border-subtle);
-  background: rgba(7, 9, 14, 0.9);
-  z-index: 10;
-}
-
-.footer-left {
-  display: flex;
-  align-items: center;
-}
-
-.footer-back-link {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  transition: color var(--transition-fast);
-}
-
-.footer-back-link:hover {
-  color: var(--text-primary);
-}
-
-.footer-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.footer-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-weight: 600;
-  transition: all var(--transition-fast);
-  cursor: pointer;
+  overflow: hidden;
 }
 
-.run-btn {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border-medium);
+.bottom-panel-nav {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  background: var(--bg-dark);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 8px;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.bottom-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-radius: var(--radius-xs);
+  transition: all var(--transition-fast);
+}
+
+.bottom-tab-btn:hover {
   color: var(--text-primary);
 }
 
-.run-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: var(--accent-secondary);
+.bottom-tab-btn.active {
+  color: var(--text-primary);
+  background: var(--bg-surface-elevated);
+  font-weight: 600;
+  border: 1px solid var(--border-subtle);
 }
 
-.submit-btn {
-  background: var(--accent-gradient);
-  border: none;
-  color: #ffffff;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+.bottom-panel-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.submit-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
-}
-
-.submit-btn:disabled, .run-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.spin-icon {
-  animation: spin 1s linear infinite;
-}
-
-/* Responsive Rules */
+/* Responsive Media Queries */
 @media (max-width: 1024px) {
-  .workspace-main-container {
-    grid-template-columns: 1fr;
-    overflow-y: auto;
-  }
-
   .problem-workspace-page {
     height: auto;
     min-height: 100vh;
-    overflow: auto;
+    overflow-y: auto;
+  }
+
+  .workspace-main-layout {
+    grid-template-columns: 1fr;
+    overflow: visible;
+    height: auto;
   }
 
   .workspace-pane {
     height: auto;
-    min-height: 450px;
+    overflow: visible;
+  }
+
+  .left-description-pane {
+    min-height: 380px;
+  }
+
+  .editor-panel-box {
+    min-height: 380px;
+  }
+
+  .bottom-panel-box {
+    min-height: 280px;
   }
 }
 
 @media (max-width: 640px) {
-  .workspace-main-container {
-    padding: 8px;
+  .workspace-main-layout {
+    padding: 6px;
+    gap: 6px;
   }
-  .footer-actions {
-    width: 100%;
-    justify-content: flex-end;
+  .subnav-title {
+    max-width: 180px;
   }
-  .footer-btn {
-    padding: 8px 14px;
-    font-size: 0.8rem;
+  .editor-panel-box {
+    min-height: 320px;
   }
 }

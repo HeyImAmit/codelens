@@ -1,11 +1,11 @@
-/* Problem Description CSS */
+/* Problem Description Panel CSS */
 .problem-description-panel {
   display: flex;
   flex-direction: column;
   height: 100%;
   background: var(--bg-surface);
-  border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -13,112 +13,143 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 0 16px;
+  height: 42px;
+  background: var(--bg-dark);
   border-bottom: 1px solid var(--border-subtle);
-  background: rgba(11, 14, 20, 0.4);
+  flex-shrink: 0;
 }
 
-.title-badge-group {
+.title-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .problem-id-tag {
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  color: var(--accent-secondary);
-  background: rgba(6, 182, 212, 0.1);
-  border: 1px solid rgba(6, 182, 212, 0.25);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
+  color: var(--text-dim);
 }
 
 .problem-panel-title {
-  font-size: 1.2rem;
-  font-weight: 700;
+  font-size: 0.95rem;
+  font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+
+.diff-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  flex-shrink: 0;
+}
+
+.diff-badge.easy {
+  background: var(--diff-easy-bg);
+  color: var(--diff-easy-text);
+  border: 1px solid var(--diff-easy-border);
+}
+
+.diff-badge.medium {
+  background: var(--diff-medium-bg);
+  color: var(--diff-medium-text);
+  border: 1px solid var(--diff-medium-border);
+}
+
+.diff-badge.hard {
+  background: var(--diff-hard-bg);
+  color: var(--diff-hard-text);
+  border: 1px solid var(--diff-hard-border);
 }
 
 .description-scroll-body {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
 }
 
 .desc-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .section-heading {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--text-secondary);
+  gap: 6px;
+  color: var(--text-muted);
 }
 
 .section-heading h3 {
-  font-size: 0.95rem;
+  font-size: 0.78rem;
   font-weight: 600;
-  color: var(--text-primary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 0;
 }
 
 .problem-statement-text {
-  font-size: 0.95rem;
-  line-height: 1.65;
-  color: #cbd5e1;
-  white-space: pre-wrap;
-}
-
-.format-box, .constraints-box {
-  padding: 12px 16px;
-  border-radius: var(--radius-md);
-  background: rgba(7, 9, 14, 0.6);
-  border: 1px solid var(--border-subtle);
-}
-
-.format-box code, .constraints-box code {
-  font-family: var(--font-mono);
   font-size: 0.875rem;
-  color: #e2e8f0;
+  color: var(--text-secondary);
+  line-height: 1.6;
   white-space: pre-wrap;
 }
 
-.ai-hint-callout {
+.code-spec-box {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  padding: 8px 12px;
+}
+
+.code-spec-box code {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.workspace-guidance-callout {
+  margin-top: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-dark);
+  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.2);
-  margin-top: auto;
+  gap: 10px;
+  font-size: 0.78rem;
 }
 
-.ai-hint-callout .hint-icon {
+.callout-icon {
   color: var(--accent-primary);
   flex-shrink: 0;
   margin-top: 2px;
 }
 
-.ai-hint-callout strong {
+.workspace-guidance-callout strong {
+  color: var(--text-primary);
   display: block;
-  font-size: 0.85rem;
-  color: #a5b4fc;
   margin-bottom: 2px;
 }
 
-.ai-hint-callout p {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
+.workspace-guidance-callout p {
+  color: var(--text-muted);
   line-height: 1.4;
+  margin: 0;
 }
