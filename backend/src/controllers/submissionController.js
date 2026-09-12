@@ -1,4 +1,5 @@
 const pool = require("../config/db");
+const { publishToQueue } = require("../config/rabbitmq");
 
 const createSubmission = async (req, res) => {
     try {
@@ -26,7 +27,7 @@ const createSubmission = async (req, res) => {
             });
         }
 
-        // Create submission
+        // Insert submission into PostgreSQL
         const result = await pool.query(
             `INSERT INTO submissions
                 (problem_id, language, source_code, status)
@@ -36,7 +37,21 @@ const createSubmission = async (req, res) => {
             [problemId, language, sourceCode]
         );
 
-        res.status(201).json(result.rows[0]);
+        const submission = result.rows[0];
+
+        // Publish job to RabbitMQ queue 'code-execution'
+        try {
+            await publishToQueue("code-execution", {
+                submissionId: submission.id
+            });
+        } catch (queueError) {
+            console.error("Failed to publish submission job to RabbitMQ:", queueError.message);
+            return res.status(500).json({
+                message: "Submission saved but failed to queue execution job"
+            });
+        }
+
+        res.status(201).json(submission);
 
     } catch (error) {
         console.error(error);
@@ -46,7 +61,6 @@ const createSubmission = async (req, res) => {
         });
     }
 };
-
 
 const getSubmissionById = async (req, res) => {
     try {
@@ -75,7 +89,6 @@ const getSubmissionById = async (req, res) => {
         });
     }
 };
-
 
 module.exports = {
     createSubmission,
