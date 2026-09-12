@@ -1,6 +1,7 @@
 const amqp = require("amqplib");
 require("dotenv").config();
 const pool = require("./config/db");
+const { getTestCasesByProblemId } = require("./repositories/testCaseRepository");
 const { executeJavaSubmission } = require("./services/execution/javaExecutor");
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://localhost:5672";
@@ -66,13 +67,17 @@ const startWorker = async () => {
                     console.log(`Language: ${submission.language}`);
                     console.log(`Status: PENDING`);
 
-                    // Check supported language for Milestone 3C (Java)
+                    // Check supported language (Java for Milestone 3D)
                     const lang = String(submission.language).toLowerCase();
                     if (lang !== "java") {
-                        console.warn(`Language '${submission.language}' execution is not supported in Milestone 3C.`);
+                        console.warn(`Language '${submission.language}' is not supported in Milestone 3D.`);
                         channel.nack(msg, false, false);
                         return;
                     }
+
+                    // Retrieve problem test cases
+                    const testCases = await getTestCasesByProblemId(submission.problem_id);
+                    console.log(`Loaded ${testCases.length} test cases for problem ${submission.problem_id}`);
 
                     // Transition status: PENDING -> RUNNING
                     await pool.query(
@@ -81,10 +86,10 @@ const startWorker = async () => {
                     );
                     console.log(`Execution started for submission ${submissionId}`);
 
-                    // Execute Java code inside isolated Docker sandbox
-                    const execResult = await executeJavaSubmission(submission.source_code);
+                    // Evaluate Java code against test cases in Docker sandbox
+                    const execResult = await executeJavaSubmission(submission.source_code, testCases);
 
-                    // Update PostgreSQL record with execution metrics and status
+                    // Update PostgreSQL record with final verdict status and metrics
                     await pool.query(
                         `UPDATE submissions
                          SET status = $1, output = $2, error = $3, execution_time = $4
@@ -98,11 +103,11 @@ const startWorker = async () => {
                         ]
                     );
 
-                    console.log(`Execution completed for submission ${submissionId}`);
-                    console.log(`  Final Status: ${execResult.status}`);
+                    console.log(`Evaluation completed for submission ${submissionId}`);
+                    console.log(`  Verdict: ${execResult.status}`);
                     console.log(`  Execution Time: ${execResult.executionTime} ms`);
 
-                    // Acknowledge RabbitMQ message after database update
+                    // Acknowledge RabbitMQ message
                     channel.ack(msg);
                 } catch (dbError) {
                     console.error(`Error processing execution for submission ${submissionId}:`, dbError.message);
