@@ -3,7 +3,7 @@
  * Connects frontend client to Express backend on localhost:5000
  */
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 /**
  * Normalizes problem difficulty formatting
@@ -83,3 +83,35 @@ export const getProblemById = async (id) => {
     throw error;
   }
 };
+
+/**
+ * Creates a new problem submission POST /api/submissions
+ * @param {Object} payload - { problemId, language, sourceCode }
+ */
+export const createSubmission = async ({ problemId, language, sourceCode }) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/submissions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        problemId: Number(problemId),
+        language: String(language).toLowerCase(),
+        sourceCode: String(sourceCode),
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Submission failed with status ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('API Error [createSubmission]:', error);
+    throw error;
+  }
+};
+

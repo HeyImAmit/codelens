@@ -1,0 +1,32 @@
+/* Code Editor CSS */
+.monaco-editor-wrapper {
+  width: 100%;
+  height: 100%;
+  min-height: 380px;
+  background: #1e1e1e; /* Standard Monaco vs-dark bg */
+  position: relative;
+}
+
+.editor-loading-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  gap: 12px;
+  background: #1e1e1e;
+  color: var(--text-muted);
+}
+
+.editor-skeleton {
+  width: 80%;
+  height: 60%;
+  border-radius: var(--radius-md);
+}
+
+.loading-text {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
