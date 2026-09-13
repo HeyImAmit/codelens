@@ -6,6 +6,7 @@ const { connectRedis } = require("./config/redis");
 const { connectRabbitMQ } = require("./config/rabbitmq");
 const problemRoutes = require("./routes/problemRoute");
 const submissionRoutes = require("./routes/submissionRoutes");
+const aiRoutes = require("./routes/aiRoutes");
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/problems", problemRoutes);
 app.use("/api/submissions", submissionRoutes);
+app.use("/api/ai", aiRoutes);
 
 const PORT = process.env.PORT || 5000;
 
