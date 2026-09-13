@@ -9,6 +9,7 @@ const config = {
     port: parseInt(process.env.PORT, 10) || 5000,
     nodeEnv: process.env.NODE_ENV || "development",
     isProduction: process.env.NODE_ENV === "production",
+    frontendOrigin: process.env.FRONTEND_ORIGIN || "http://localhost:5173",
 
     // Database Configuration (Docker PostgreSQL on host port 5433 by default)
     db: {
@@ -52,7 +53,8 @@ const config = {
     // Execution Sandbox Settings
     execution: {
         timeoutMs: parseInt(process.env.EXECUTION_TIMEOUT_MS, 10) || 10000,
-        maxOutputBytes: parseInt(process.env.EXECUTION_MAX_OUTPUT_BYTES, 10) || 65536
+        maxOutputBytes: parseInt(process.env.EXECUTION_MAX_OUTPUT_BYTES, 10) || 65536,
+        maxSourceCodeLength: parseInt(process.env.SUBMISSION_MAX_CODE_BYTES, 10) || 50000
     },
 
     // Logging & Observability Settings

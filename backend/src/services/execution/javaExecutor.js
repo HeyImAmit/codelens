@@ -4,9 +4,10 @@ const os = require("os");
 const { execFile, exec, spawn } = require("child_process");
 const { compareOutputs } = require("./outputComparator");
 
-const MAX_OUTPUT_LENGTH = 10000;      // 10,000 characters output limit
-const COMPILATION_TIMEOUT_MS = 10000; // 10s timeout for compilation
-const TEST_CASE_TIMEOUT_MS = 5000;    // 5s timeout per test case
+const MAX_OUTPUT_LENGTH = 10000;         // 10,000 characters output limit for DB storage
+const MAX_STREAM_BUFFER_BYTES = 64 * 1024; // 64 KB stream buffer limit before terminating process
+const COMPILATION_TIMEOUT_MS = 10000;    // 10s timeout for compilation
+const TEST_CASE_TIMEOUT_MS = 5000;       // 5s timeout per test case
 const IMAGE_TAG = "codelens-java-runner:1.0";
 
 /**
@@ -109,6 +110,7 @@ const runTestCase = (tempDir, input) => {
 
         const startTime = Date.now();
         let isTimedOut = false;
+        let isOutputExceeded = false;
         let stdout = "";
         let stderr = "";
 
@@ -120,6 +122,7 @@ const runTestCase = (tempDir, input) => {
             exec(`docker rm -f ${containerName}`, () => {});
             resolve({
                 isTimedOut: true,
+                isOutputExceeded: false,
                 stdout: "",
                 stderr: "Time Limit Exceeded (5.0s)",
                 exitCode: 124,
@@ -134,13 +137,22 @@ const runTestCase = (tempDir, input) => {
 
         if (child.stdout) {
             child.stdout.on("data", (data) => {
-                stdout += data.toString();
+                if (stdout.length < MAX_STREAM_BUFFER_BYTES) {
+                    stdout += data.toString();
+                    if (stdout.length >= MAX_STREAM_BUFFER_BYTES) {
+                        isOutputExceeded = true;
+                        child.kill("SIGKILL");
+                        exec(`docker rm -f ${containerName}`, () => {});
+                    }
+                }
             });
         }
 
         if (child.stderr) {
             child.stderr.on("data", (data) => {
-                stderr += data.toString();
+                if (stderr.length < MAX_STREAM_BUFFER_BYTES) {
+                    stderr += data.toString();
+                }
             });
         }
 
@@ -149,6 +161,7 @@ const runTestCase = (tempDir, input) => {
             if (!isTimedOut) {
                 resolve({
                     isTimedOut: false,
+                    isOutputExceeded: false,
                     stdout: stdout,
                     stderr: err.message,
                     exitCode: 1,
@@ -162,9 +175,10 @@ const runTestCase = (tempDir, input) => {
             if (!isTimedOut) {
                 resolve({
                     isTimedOut: false,
+                    isOutputExceeded: isOutputExceeded,
                     stdout: stdout,
-                    stderr: stderr,
-                    exitCode: code !== null ? code : 0,
+                    stderr: isOutputExceeded ? "Output Limit Exceeded (Excessive stdout output truncated and process killed)" : stderr,
+                    exitCode: code !== null ? code : (isOutputExceeded ? 137 : 0),
                     duration: Date.now() - startTime
                 });
             }
@@ -198,79 +212,95 @@ const executeJavaSubmission = async (sourceCode, testCases = []) => {
         await fs.writeFile(mainFilePath, sourceCode, "utf8");
 
         // 1. Compile Once
-        const compileStart = Date.now();
         const compileResult = await compileJava(tempDir);
-        const compileDuration = Date.now() - compileStart;
-        totalExecutionTime += compileDuration;
-
         if (!compileResult.success) {
             return {
-                status: compileResult.isTimedOut ? "TIME_LIMIT_EXCEEDED" : "COMPILATION_ERROR",
+                status: "COMPILATION_ERROR",
                 output: null,
                 error: truncate(compileResult.error),
-                executionTime: totalExecutionTime
+                executionTime: 0
             };
         }
 
-        // 2. Sequential Test Case Execution with Early Termination
+        // 2. Execute Each Test Case Sequentially
         for (let i = 0; i < testCases.length; i++) {
             const tc = testCases[i];
-            const runRes = await runTestCase(tempDir, tc.input);
+            const runResult = await runTestCase(tempDir, tc.input);
 
-            totalExecutionTime += runRes.duration;
+            totalExecutionTime += runResult.duration;
 
-            // Timeout check
-            if (runRes.isTimedOut) {
+            // Check Runaway Output Limit Exceeded
+            if (runResult.isOutputExceeded) {
+                return {
+                    status: "RUNTIME_ERROR",
+                    output: truncate(runResult.stdout),
+                    error: "Output Limit Exceeded (Program generated excessive stdout/stderr stream and was terminated)",
+                    executionTime: totalExecutionTime
+                };
+            }
+
+            // Check Timeout
+            if (runResult.isTimedOut) {
                 return {
                     status: "TIME_LIMIT_EXCEEDED",
                     output: null,
-                    error: `Time Limit Exceeded on test case ${i + 1} (5.0s limit)`,
+                    error: "Time Limit Exceeded (5.0s)",
                     executionTime: totalExecutionTime
                 };
             }
 
-            // Runtime Error check
-            if (runRes.exitCode !== 0) {
+            // Check Runtime Error
+            if (runResult.exitCode !== 0) {
                 return {
                     status: "RUNTIME_ERROR",
-                    output: truncate(runRes.stdout) || null,
-                    error: truncate(runRes.stderr || runRes.stdout || `Runtime Error on test case ${i + 1} (exit code ${runRes.exitCode})`),
+                    output: truncate(runResult.stdout),
+                    error: truncate(runResult.stderr) || `Process exited with non-zero code ${runResult.exitCode}`,
                     executionTime: totalExecutionTime
                 };
             }
 
-            // Output comparison check
-            const isMatch = compareOutputs(runRes.stdout, tc.expected_output);
+            // Check Output Correctness
+            const isMatch = compareOutputs(runResult.stdout, tc.expected_output);
             if (!isMatch) {
                 return {
                     status: "WRONG_ANSWER",
-                    output: truncate(runRes.stdout) || null,
-                    error: `Wrong Answer on test case ${i + 1}.`,
+                    output: truncate(runResult.stdout),
+                    error: `Wrong Answer on test case ${i + 1}`,
                     executionTime: totalExecutionTime
                 };
             }
         }
 
-        // 3. All test cases passed -> ACCEPTED
+        // All test cases passed!
         return {
             status: "ACCEPTED",
-            output: `All ${testCases.length} test cases passed.`,
+            output: "All test cases passed successfully.",
             error: null,
             executionTime: totalExecutionTime
         };
 
     } catch (err) {
-        console.error("Java executor internal error:", err.message);
-        throw err;
+        return {
+            status: "RUNTIME_ERROR",
+            output: null,
+            error: truncate(err.message),
+            executionTime: totalExecutionTime
+        };
     } finally {
+        // Cleanup temporary directory
         try {
             await fs.rm(tempDir, { recursive: true, force: true });
         } catch (cleanupErr) {
-            console.error("Temp dir cleanup error:", cleanupErr.message);
+            // Ignore cleanup failure
         }
     }
 };
 
 module.exports = {
-    executeJavaSubmission
+    executeJavaSubmission,
+    compileJava,
+    runTestCase,
+    truncate,
+    MAX_OUTPUT_LENGTH,
+    MAX_STREAM_BUFFER_BYTES
 };

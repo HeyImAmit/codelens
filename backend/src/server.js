@@ -16,8 +16,29 @@ const healthRoutes = require("./routes/healthRoutes");
 
 const app = express();
 
-// 1. Global Middleware
-app.use(cors());
+// 1. Basic HTTP Security Headers & Payload Limits
+app.use((req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    next();
+});
+
+const corsOptions = {
+    origin: (origin, callback) => {
+        if (!origin || !config.isProduction) {
+            return callback(null, true);
+        }
+        const allowedOrigins = config.frontendOrigin.split(",").map((o) => o.trim());
+        if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+            return callback(null, true);
+        }
+        return callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
+    credentials: true
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: "2mb" }));
 app.use(requestIdMiddleware);
 
@@ -60,7 +81,8 @@ const startServer = async () => {
             logger.info(`CodeLens API server running on port ${config.port}`, {
                 port: config.port,
                 env: config.nodeEnv,
-                dbPort: config.db.port
+                dbPort: config.db.port,
+                frontendOrigin: config.frontendOrigin
             });
         });
     } catch (error) {

@@ -1,0 +1,129 @@
+services:
+  # -------------------------------------------------------------
+  # PostgreSQL with pgvector (Port 5433 on host -> 5432 container)
+  # -------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: codelens-postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-codelens}
+    volumes:
+      - codelens_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-codelens}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # -------------------------------------------------------------
+  # Redis Cache & Submission Rate Limiter
+  # -------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: codelens-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - codelens_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # -------------------------------------------------------------
+  # RabbitMQ Message Broker
+  # -------------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: codelens-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - codelens_rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # -------------------------------------------------------------
+  # CodeLens Backend API Server
+  # -------------------------------------------------------------
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: codelens-api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      NODE_ENV: ${NODE_ENV:-development}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+      DB_USER: ${DB_USER:-postgres}
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME:-codelens}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      AI_REQUEST_TIMEOUT_MS: ${AI_REQUEST_TIMEOUT_MS:-15000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # -------------------------------------------------------------
+  # CodeLens Asynchronous Java Execution Worker
+  # -------------------------------------------------------------
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: codelens-worker
+    command: ["npm", "run", "worker"]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DB_USER: ${DB_USER:-postgres}
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME:-codelens}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_PORT: 5432
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      EXECUTION_TIMEOUT_MS: 10000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  codelens_pgdata:
+  codelens_redisdata:
+  codelens_rabbitmqdata:

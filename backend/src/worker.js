@@ -12,6 +12,14 @@ const RABBITMQ_URL = config.rabbitmq.url;
 const QUEUE_NAME = config.rabbitmq.queueName;
 const PREFETCH_COUNT = config.rabbitmq.prefetchCount;
 
+const TERMINAL_STATUSES = new Set([
+    "ACCEPTED",
+    "WRONG_ANSWER",
+    "COMPILATION_ERROR",
+    "RUNTIME_ERROR",
+    "TIME_LIMIT_EXCEEDED"
+]);
+
 let connection = null;
 let channel = null;
 let consumerTag = null;
@@ -58,7 +66,7 @@ const startWorker = async () => {
                     const content = msg.content.toString();
                     data = JSON.parse(content);
                 } catch (parseError) {
-                    workerLogger.error("Malformed JSON payload in RabbitMQ message", {
+                    workerLogger.error("Malformed JSON payload in RabbitMQ message (NACK, no requeue)", {
                         error: parseError.message
                     });
                     channel.nack(msg, false, false);
@@ -96,12 +104,21 @@ const startWorker = async () => {
                     );
 
                     if (result.rows.length === 0) {
-                        subLogger.warn("SUBMISSION_NOT_FOUND: Submission record does not exist in DB");
+                        subLogger.warn("SUBMISSION_NOT_FOUND: Submission record does not exist in DB (NACK, no requeue)");
                         channel.nack(msg, false, false);
                         return;
                     }
 
                     const submission = result.rows[0];
+
+                    // Idempotency check: if submission is already in a terminal state, safely ACK without re-executing
+                    if (TERMINAL_STATUSES.has(submission.status)) {
+                        subLogger.warn("IDEMPOTENT_SKIP: Submission is already in terminal state; acknowledging duplicate message without re-executing", {
+                            currentStatus: submission.status
+                        });
+                        channel.ack(msg);
+                        return;
+                    }
 
                     subLogger.info("SUBMISSION_LOADED: Submission fetched from PostgreSQL", {
                         problemId: submission.problem_id,
@@ -113,7 +130,11 @@ const startWorker = async () => {
                     const lang = String(submission.language).toLowerCase();
                     if (lang !== "java") {
                         subLogger.warn(`UNSUPPORTED_LANGUAGE: Language '${submission.language}' is not supported`);
-                        channel.nack(msg, false, false);
+                        await pool.query(
+                            `UPDATE submissions SET status = 'COMPILATION_ERROR', error = 'Unsupported programming language' WHERE id = $1`,
+                            [submissionId]
+                        );
+                        channel.ack(msg);
                         return;
                     }
 
@@ -124,11 +145,20 @@ const startWorker = async () => {
                         testCaseCount: testCases.length
                     });
 
-                    // Transition status: PENDING -> RUNNING
-                    await pool.query(
-                        `UPDATE submissions SET status = 'RUNNING' WHERE id = $1`,
+                    // Atomic Transition status: PENDING -> RUNNING
+                    const updateRunningRes = await pool.query(
+                        `UPDATE submissions SET status = 'RUNNING' WHERE id = $1 AND status = 'PENDING' RETURNING id`,
                         [submissionId]
                     );
+
+                    if (updateRunningRes.rows.length === 0 && submission.status !== "RUNNING") {
+                        subLogger.warn("STATUS_TRANSITION_ABORT: Submission state is no longer PENDING", {
+                            currentStatus: submission.status
+                        });
+                        channel.ack(msg);
+                        return;
+                    }
+
                     subLogger.info("STATUS_RUNNING: Execution started in Docker sandbox");
 
                     // Evaluate Java code against test cases in Docker sandbox
@@ -155,9 +185,9 @@ const startWorker = async () => {
 
                     // Acknowledge RabbitMQ message
                     channel.ack(msg);
-                    subLogger.info("MESSAGE_ACK: Message acknowledged");
+                    subLogger.info("MESSAGE_ACK: Message acknowledged successfully");
                 } catch (dbError) {
-                    subLogger.error("EXECUTION_ERROR: Error processing submission", {
+                    subLogger.error("EXECUTION_ERROR: Transient error processing submission; requeueing", {
                         error: dbError.message
                     });
                     channel.nack(msg, false, true);

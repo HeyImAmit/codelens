@@ -9,7 +9,8 @@
     "db:seed": "node src/config/seedDsaProblems.js",
     "rag:ingest": "node src/scripts/ingestKnowledge.js",
     "rag:evaluate": "node src/scripts/evaluateRetrieval.js",
-    "test:7a": "node src/scripts/test_milestone_7a.js"
+    "test:7a": "node src/scripts/test_milestone_7a.js",
+    "test:7b": "node src/scripts/test_milestone_7b.js"
   },
   "keywords": [],
   "author": "",
