@@ -1,6 +1,7 @@
 const pool = require("../../config/db");
 const { retrieveRelevantKnowledge } = require("../rag/retrievalService");
 const { generateText } = require("./aiService");
+const { logger } = require("../../utils/logger");
 
 const SUPPORTED_LANGUAGES = new Set([
     "java",
@@ -128,7 +129,6 @@ function parseAndValidateReviewJson(rawText) {
         throw new Error("Model returned empty response for code review");
     }
 
-    // Strip markdown code fences if present (```json ... ``` or ``` ...)
     let cleaned = rawText.trim();
     if (cleaned.startsWith("```")) {
         cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
@@ -137,13 +137,12 @@ function parseAndValidateReviewJson(rawText) {
     let parsed;
     try {
         parsed = JSON.parse(cleaned);
-    } catch (e) {
-        // Attempt regex extraction of JSON object if surrounded by preamble
+    } catch {
         const match = cleaned.match(/\{[\s\S]*\}/);
         if (match) {
             try {
                 parsed = JSON.parse(match[0]);
-            } catch (innerError) {
+            } catch {
                 throw new Error("Failed to parse code review JSON from model response");
             }
         } else {
@@ -155,7 +154,6 @@ function parseAndValidateReviewJson(rawText) {
         throw new Error("Invalid review structure: expected JSON object");
     }
 
-    // Validate and sanitize required fields
     const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "Code review completed.";
 
     const rawAssessment = (parsed.correctness?.assessment || "").toUpperCase();
@@ -210,9 +208,10 @@ function parseAndValidateReviewJson(rawText) {
  * @param {number} params.problemId - ID of problem
  * @param {string} params.language - Programming language
  * @param {string} params.sourceCode - User source code
+ * @param {string} [params.requestId] - Correlation ID
  * @returns {Promise<Object>} Review result, sources, and timing metrics
  */
-async function reviewCode({ problemId, language, sourceCode }) {
+async function reviewCode({ problemId, language, sourceCode, requestId }) {
     const normLang = (language || "").trim().toLowerCase();
     if (!SUPPORTED_LANGUAGES.has(normLang)) {
         const err = new Error(`Unsupported programming language: "${language}". Supported: ${Array.from(SUPPORTED_LANGUAGES).join(", ")}`);
@@ -250,7 +249,7 @@ Analyze the code and return your complete evaluation strictly as JSON.`;
         ["human", userPrompt]
     ];
 
-    const completion = await generateText(messages, { temperature: 0.1 });
+    const completion = await generateText(messages, { temperature: 0.1, requestId });
     const generationMs = Date.now() - genStart;
     const totalMs = retrievalMs + generationMs;
 
@@ -272,9 +271,19 @@ Analyze the code and return your complete evaluation strictly as JSON.`;
         }
     }
 
-    console.log(
-        `[AI Code Review] Review generated | problemId=${problemId} | lang=${normLang} | codeLen=${sourceCode.length} | assessment=${structuredReview.correctness.assessment} | latency={retrieval: ${retrievalMs}ms, gen: ${generationMs}ms, total: ${totalMs}ms}`
-    );
+    // 7. Structured Logging (Safe: no source code or prompts)
+    logger.info("AI Code Review completed", {
+        operation: "code_review",
+        problemId,
+        language: normLang,
+        codeLength: sourceCode.length,
+        assessment: structuredReview.correctness.assessment,
+        retrievedCount: retrievedChunks.length,
+        retrievalMs,
+        generationMs,
+        totalMs,
+        requestId
+    });
 
     return {
         review: structuredReview,

@@ -1,6 +1,7 @@
 const pool = require("../../config/db");
 const { retrieveRelevantKnowledge } = require("../rag/retrievalService");
 const { generateText } = require("./aiService");
+const { logger } = require("../../utils/logger");
 
 const HINT_SYSTEM_PROMPT = `You are an expert Data Structures and Algorithms (DSA) tutor for the CodeLens platform.
 
@@ -123,8 +124,6 @@ function parseAndValidateHintJson(rawText, requestedLevel) {
     }
 
     let cleaned = rawText.trim();
-
-    // Strip markdown code fences if present
     if (cleaned.startsWith("```")) {
         cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
     }
@@ -132,13 +131,12 @@ function parseAndValidateHintJson(rawText, requestedLevel) {
     let parsed;
     try {
         parsed = JSON.parse(cleaned);
-    } catch (err) {
-        // Attempt regex fallback if wrapped in surrounding commentary
+    } catch {
         const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
             try {
                 parsed = JSON.parse(jsonMatch[0]);
-            } catch (innerErr) {
+            } catch {
                 throw new Error("Failed to parse AI hint output as JSON");
             }
         } else {
@@ -182,9 +180,10 @@ function parseAndValidateHintJson(rawText, requestedLevel) {
  * @param {number} params.level - Hint level (1-4)
  * @param {string} [params.sourceCode] - Optional user code attempt
  * @param {Array<string>} [params.previousHints] - Optional list of previous hints
+ * @param {string} [params.requestId] - Correlation ID
  * @returns {Promise<Object>} Formatted progressive hint response
  */
-async function generateProgressiveHint({ problemId, level, sourceCode = null, previousHints = [] }) {
+async function generateProgressiveHint({ problemId, level, sourceCode = null, previousHints = [], requestId }) {
     const totalStart = Date.now();
 
     // 1. Fetch Authoritative Problem Details from PostgreSQL
@@ -214,7 +213,8 @@ async function generateProgressiveHint({ problemId, level, sourceCode = null, pr
 
     const completion = await generateText(messages, {
         temperature: 0.2,
-        maxTokens: 1000
+        maxTokens: 1000,
+        requestId
     });
     const generationMs = Date.now() - genStart;
     const totalMs = Date.now() - totalStart;
@@ -236,6 +236,18 @@ async function generateProgressiveHint({ problemId, level, sourceCode = null, pr
             });
         }
     }
+
+    // 7. Structured Logging (Safe: no sourceCode or full prompts)
+    logger.info("Progressive AI Hint generated", {
+        operation: "ai_hint",
+        problemId,
+        level,
+        retrievedCount: retrievedChunks.length,
+        retrievalMs,
+        generationMs,
+        totalMs,
+        requestId
+    });
 
     return {
         success: true,

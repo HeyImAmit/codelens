@@ -1,6 +1,8 @@
 const { getRedisClient, isRedisReady } = require("../../config/redis");
+const { config } = require("../../config/env");
+const { logger } = require("../../utils/logger");
 
-const CACHE_TTL_SECONDS = 300; // 5 minutes TTL
+const CACHE_TTL_SECONDS = config.redis.cacheTtlSeconds;
 
 const CACHE_KEYS = {
     ALL_PROBLEMS: "problems:all",
@@ -18,19 +20,19 @@ const getCachedAllProblems = async () => {
     try {
         const data = await client.get(key);
         if (data) {
-            console.log(`Problem cache HIT: ${key}`);
+            logger.debug("Problem cache HIT", { key });
             return JSON.parse(data);
         }
-        console.log(`Problem cache MISS: ${key}`);
+        logger.debug("Problem cache MISS", { key });
         return null;
     } catch (error) {
-        console.error(`Problem cache error while reading ${key}:`, error.message);
+        logger.warn("Problem cache error while reading all problems", { key, error: error.message });
         return null;
     }
 };
 
 /**
- * Set all problems in cache with 300s TTL
+ * Set all problems in cache
  */
 const setCachedAllProblems = async (problems) => {
     if (!isRedisReady() || !problems) return;
@@ -42,7 +44,7 @@ const setCachedAllProblems = async (problems) => {
             EX: CACHE_TTL_SECONDS
         });
     } catch (error) {
-        console.error(`Problem cache error while setting ${key}:`, error.message);
+        logger.warn("Problem cache error while setting all problems", { key, error: error.message });
     }
 };
 
@@ -57,19 +59,19 @@ const getCachedProblemById = async (id) => {
     try {
         const data = await client.get(key);
         if (data) {
-            console.log(`Problem cache HIT: ${key}`);
+            logger.debug("Problem cache HIT", { key, problemId: id });
             return JSON.parse(data);
         }
-        console.log(`Problem cache MISS: ${key}`);
+        logger.debug("Problem cache MISS", { key, problemId: id });
         return null;
     } catch (error) {
-        console.error(`Problem cache error while reading ${key}:`, error.message);
+        logger.warn("Problem cache error while reading problem by ID", { key, problemId: id, error: error.message });
         return null;
     }
 };
 
 /**
- * Set problem by ID in cache with 300s TTL
+ * Set problem by ID in cache
  */
 const setCachedProblemById = async (id, problem) => {
     if (!isRedisReady() || !problem) return;
@@ -81,12 +83,12 @@ const setCachedProblemById = async (id, problem) => {
             EX: CACHE_TTL_SECONDS
         });
     } catch (error) {
-        console.error(`Problem cache error while setting ${key}:`, error.message);
+        logger.warn("Problem cache error while setting problem by ID", { key, problemId: id, error: error.message });
     }
 };
 
 /**
- * Invalidate problem cache keys (for future mutations)
+ * Invalidate problem cache keys
  */
 const invalidateProblemCache = async (id) => {
     if (!isRedisReady()) return;
@@ -98,9 +100,9 @@ const invalidateProblemCache = async (id) => {
             keysToDelete.push(CACHE_KEYS.PROBLEM_BY_ID(id));
         }
         await client.del(keysToDelete);
-        console.log(`Problem cache invalidated for: ${keysToDelete.join(", ")}`);
+        logger.info("Problem cache invalidated", { keys: keysToDelete });
     } catch (error) {
-        console.error("Problem cache error while invalidating:", error.message);
+        logger.warn("Problem cache error while invalidating", { error: error.message });
     }
 };
 

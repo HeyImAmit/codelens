@@ -1,4 +1,6 @@
 const { ChatGroq } = require("@langchain/groq");
+const { config } = require("../../config/env");
+const { logger } = require("../../utils/logger");
 
 /**
  * Normalizes and classifies errors from LangChain / Groq SDK
@@ -70,12 +72,12 @@ function classifyAiError(error) {
 /**
  * Generates text completion using LangChain ChatGroq.
  *
- * @param {string} prompt - Clean validated text prompt
+ * @param {string|Array} prompt - Clean validated text prompt or messages array
  * @param {Object} [options] - Optional generation options
  * @returns {Promise<{ text: string, model: string, usage: Object|null }>}
  */
 async function generateText(prompt, options = {}) {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = config.ai.groqApiKey;
     if (!apiKey || apiKey.trim() === "") {
         const configError = new Error("Groq API key is not configured");
         configError.isConfigError = true;
@@ -83,8 +85,8 @@ async function generateText(prompt, options = {}) {
         throw configError;
     }
 
-    const modelName = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-    const timeoutMs = parseInt(process.env.AI_REQUEST_TIMEOUT_MS, 10) || 15000;
+    const modelName = config.ai.groqModel;
+    const timeoutMs = config.ai.requestTimeoutMs;
 
     const chatModel = new ChatGroq({
         apiKey: apiKey,
@@ -97,7 +99,11 @@ async function generateText(prompt, options = {}) {
     const startTime = Date.now();
 
     try {
-        console.log(`[AI Service] AI request started | provider=groq | model=${modelName}`);
+        logger.debug("AI provider request started", {
+            provider: "groq",
+            model: modelName,
+            requestId: options.requestId
+        });
 
         const response = await chatModel.invoke(prompt);
         const latencyMs = Date.now() - startTime;
@@ -113,18 +119,15 @@ async function generateText(prompt, options = {}) {
             outputText = String(response.content || "");
         }
 
-        // Only log token usage if the provider/LangChain exposed reliable usage metadata
         const usage = response.usage_metadata || response.response_metadata?.tokenUsage || null;
 
-        if (usage) {
-            console.log(
-                `[AI Service] AI provider request completed | provider=groq | model=${modelName} | latency=${latencyMs}ms | usage=${JSON.stringify(usage)}`
-            );
-        } else {
-            console.log(
-                `[AI Service] AI provider request completed | provider=groq | model=${modelName} | latency=${latencyMs}ms`
-            );
-        }
+        logger.info("AI provider request completed", {
+            provider: "groq",
+            model: modelName,
+            latencyMs,
+            tokens: usage?.total_tokens,
+            requestId: options.requestId
+        });
 
         return {
             text: outputText,
@@ -135,9 +138,14 @@ async function generateText(prompt, options = {}) {
         const latencyMs = Date.now() - startTime;
         const classified = classifyAiError(err);
 
-        console.error(
-            `[AI Service] AI provider request failed | provider=groq | model=${modelName} | latency=${latencyMs}ms | category=${classified.category}`
-        );
+        logger.error("AI provider request failed", {
+            provider: "groq",
+            model: modelName,
+            latencyMs,
+            category: classified.category,
+            error: classified.message,
+            requestId: options.requestId
+        });
 
         const serviceError = new Error(classified.message);
         serviceError.statusCode = classified.statusCode;

@@ -1,51 +1,90 @@
 const amqp = require("amqplib");
-require("dotenv").config();
+const crypto = require("crypto");
+const { config } = require("./config/env");
+const { Logger } = require("./utils/logger");
 const pool = require("./config/db");
 const { getTestCasesByProblemId } = require("./repositories/testCaseRepository");
 const { executeJavaSubmission } = require("./services/execution/javaExecutor");
 
-const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://localhost:5672";
-const QUEUE_NAME = "code-execution";
+const workerLogger = new Logger({ service: "worker" });
+
+const RABBITMQ_URL = config.rabbitmq.url;
+const QUEUE_NAME = config.rabbitmq.queueName;
+const PREFETCH_COUNT = config.rabbitmq.prefetchCount;
 
 let connection = null;
 let channel = null;
+let consumerTag = null;
+let isShuttingDown = false;
+let activeJobPromise = null;
 
 const startWorker = async () => {
     try {
-        connection = await amqp.connect(RABBITMQ_URL);
-        console.log("Connected to RabbitMQ");
+        // 1. Verify PostgreSQL connectivity
+        await pool.query("SELECT 1");
+        workerLogger.info("PostgreSQL connected successfully", {
+            dbHost: config.db.host,
+            dbPort: config.db.port
+        });
 
+        // 2. Connect to RabbitMQ
+        connection = await amqp.connect(RABBITMQ_URL);
         channel = await connection.createChannel();
         await channel.assertQueue(QUEUE_NAME, { durable: true });
 
         // Ensure fair dispatch: process 1 job at a time per worker
-        channel.prefetch(1);
+        channel.prefetch(PREFETCH_COUNT);
 
-        console.log("Execution worker started");
+        workerLogger.info("Execution worker started and listening", {
+            queue: QUEUE_NAME,
+            prefetch: PREFETCH_COUNT,
+            url: RABBITMQ_URL.replace(/:\/\/.*@/, "://***@")
+        });
 
-        channel.consume(
+        // 3. Start Consumer
+        const consumeResult = await channel.consume(
             QUEUE_NAME,
             async (msg) => {
                 if (!msg) return;
+
+                if (isShuttingDown) {
+                    // Reject and requeue message if worker is actively shutting down
+                    channel.nack(msg, false, true);
+                    return;
+                }
 
                 let data;
                 try {
                     const content = msg.content.toString();
                     data = JSON.parse(content);
                 } catch (parseError) {
-                    console.error("Malformed JSON payload in RabbitMQ message:", parseError.message);
+                    workerLogger.error("Malformed JSON payload in RabbitMQ message", {
+                        error: parseError.message
+                    });
                     channel.nack(msg, false, false);
                     return;
                 }
 
                 if (!data || !data.submissionId) {
-                    console.error("Invalid message format (missing submissionId):", data);
+                    workerLogger.error("Invalid message format (missing submissionId)", { data });
                     channel.nack(msg, false, false);
                     return;
                 }
 
                 const submissionId = data.submissionId;
-                console.log(`Received submission: ${submissionId}`);
+                // Backward compatibility: handle legacy messages without requestId
+                const requestId = data.requestId || `legacy-${crypto.randomUUID().slice(0, 8)}`;
+                const subLogger = workerLogger.child({ submissionId, requestId });
+
+                subLogger.info("WORKER_RECEIVED: Message received from queue", {
+                    queue: QUEUE_NAME
+                });
+
+                // Track active job execution for graceful shutdown
+                let jobResolve;
+                activeJobPromise = new Promise((resolve) => {
+                    jobResolve = resolve;
+                });
 
                 try {
                     // Fetch submission record from PostgreSQL
@@ -57,34 +96,40 @@ const startWorker = async () => {
                     );
 
                     if (result.rows.length === 0) {
-                        console.warn(`Submission not found: ${submissionId}`);
+                        subLogger.warn("SUBMISSION_NOT_FOUND: Submission record does not exist in DB");
                         channel.nack(msg, false, false);
                         return;
                     }
 
                     const submission = result.rows[0];
 
-                    console.log(`Language: ${submission.language}`);
-                    console.log(`Status: PENDING`);
+                    subLogger.info("SUBMISSION_LOADED: Submission fetched from PostgreSQL", {
+                        problemId: submission.problem_id,
+                        language: submission.language,
+                        initialStatus: submission.status
+                    });
 
-                    // Check supported language (Java for Milestone 3D)
+                    // Check supported language
                     const lang = String(submission.language).toLowerCase();
                     if (lang !== "java") {
-                        console.warn(`Language '${submission.language}' is not supported in Milestone 3D.`);
+                        subLogger.warn(`UNSUPPORTED_LANGUAGE: Language '${submission.language}' is not supported`);
                         channel.nack(msg, false, false);
                         return;
                     }
 
                     // Retrieve problem test cases
                     const testCases = await getTestCasesByProblemId(submission.problem_id);
-                    console.log(`Loaded ${testCases.length} test cases for problem ${submission.problem_id}`);
+                    subLogger.info("TEST_CASES_LOADED: Retrieved test cases for problem", {
+                        problemId: submission.problem_id,
+                        testCaseCount: testCases.length
+                    });
 
                     // Transition status: PENDING -> RUNNING
                     await pool.query(
                         `UPDATE submissions SET status = 'RUNNING' WHERE id = $1`,
                         [submissionId]
                     );
-                    console.log(`Execution started for submission ${submissionId}`);
+                    subLogger.info("STATUS_RUNNING: Execution started in Docker sandbox");
 
                     // Evaluate Java code against test cases in Docker sandbox
                     const execResult = await executeJavaSubmission(submission.source_code, testCases);
@@ -103,15 +148,22 @@ const startWorker = async () => {
                         ]
                     );
 
-                    console.log(`Evaluation completed for submission ${submissionId}`);
-                    console.log(`  Verdict: ${execResult.status}`);
-                    console.log(`  Execution Time: ${execResult.executionTime} ms`);
+                    subLogger.info("FINAL_VERDICT: Evaluation completed", {
+                        verdict: execResult.status,
+                        executionTimeMs: execResult.executionTime
+                    });
 
                     // Acknowledge RabbitMQ message
                     channel.ack(msg);
+                    subLogger.info("MESSAGE_ACK: Message acknowledged");
                 } catch (dbError) {
-                    console.error(`Error processing execution for submission ${submissionId}:`, dbError.message);
+                    subLogger.error("EXECUTION_ERROR: Error processing submission", {
+                        error: dbError.message
+                    });
                     channel.nack(msg, false, true);
+                } finally {
+                    if (jobResolve) jobResolve();
+                    activeJobPromise = null;
                 }
             },
             {
@@ -119,31 +171,62 @@ const startWorker = async () => {
             }
         );
 
+        consumerTag = consumeResult.consumerTag;
+
         connection.on("error", (err) => {
-            console.error("RabbitMQ Worker connection error:", err.message);
+            workerLogger.error("RabbitMQ Worker connection error", { error: err.message });
         });
 
         connection.on("close", () => {
-            console.warn("RabbitMQ Worker connection closed.");
+            workerLogger.warn("RabbitMQ Worker connection closed.");
         });
 
     } catch (error) {
-        console.error("Failed to start RabbitMQ worker:", error.message);
+        workerLogger.error("Failed to start RabbitMQ execution worker", { error: error.message });
         process.exit(1);
     }
 };
 
 // Graceful shutdown handling
 const handleShutdown = async (signal) => {
-    console.log(`\nReceived ${signal}. Shutting down worker cleanly...`);
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    workerLogger.info(`Received ${signal}. Shutting down worker gracefully...`);
+
+    const shutdownTimeout = setTimeout(() => {
+        workerLogger.error("Worker shutdown timed out after 10s. Forcing exit.");
+        process.exit(1);
+    }, 10000);
+    shutdownTimeout.unref();
+
     try {
+        // 1. Stop consuming new messages
+        if (channel && consumerTag) {
+            await channel.cancel(consumerTag);
+            workerLogger.info("Stopped consuming new messages from queue.");
+        }
+
+        // 2. Wait for active execution to complete if in flight
+        if (activeJobPromise) {
+            workerLogger.info("Waiting for currently executing submission to complete...");
+            await activeJobPromise;
+            workerLogger.info("Active submission completed.");
+        }
+
+        // 3. Close RabbitMQ channel and connection
         if (channel) await channel.close();
         if (connection) await connection.close();
+        workerLogger.info("RabbitMQ connection closed.");
+
+        // 4. Close PostgreSQL pool
         await pool.end();
-        console.log("Worker cleanup complete. Exiting.");
+        workerLogger.info("PostgreSQL pool closed.");
+
+        workerLogger.info("Worker shutdown complete. Exiting cleanly.");
         process.exit(0);
     } catch (err) {
-        console.error("Error during worker shutdown:", err.message);
+        workerLogger.error("Error during worker shutdown", { error: err.message });
         process.exit(1);
     }
 };
@@ -152,3 +235,5 @@ process.on("SIGINT", () => handleShutdown("SIGINT"));
 process.on("SIGTERM", () => handleShutdown("SIGTERM"));
 
 startWorker();
+
+module.exports = { startWorker, handleShutdown };

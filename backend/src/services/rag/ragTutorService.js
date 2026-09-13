@@ -1,5 +1,6 @@
 const { retrieveRelevantKnowledge } = require("./retrievalService");
 const { generateText } = require("../ai/aiService");
+const { logger } = require("../../utils/logger");
 
 const TUTOR_SYSTEM_PROMPT = `You are an expert Data Structures and Algorithms (DSA) tutor for the CodeLens platform.
 
@@ -58,9 +59,10 @@ Please provide a clear, pedagogical, and grounded tutoring response to the user 
  * @param {Object} params
  * @param {string} params.query - User question
  * @param {number} [params.topK=3] - Number of knowledge chunks to retrieve
+ * @param {string} [params.requestId] - Correlation ID
  * @returns {Promise<Object>} Grounded answer, sources, retrieval metadata, and timing breakdown
  */
-async function answerQuestion({ query, topK = 3 }) {
+async function answerQuestion({ query, topK = 3, requestId }) {
     if (typeof query !== "string" || query.trim().length === 0) {
         throw new Error("Query string is required and cannot be empty");
     }
@@ -84,7 +86,7 @@ async function answerQuestion({ query, topK = 3 }) {
         ["human", userPrompt]
     ];
 
-    const completion = await generateText(messages, { temperature: 0.2 });
+    const completion = await generateText(messages, { temperature: 0.2, requestId });
     const generationMs = Date.now() - genStart;
     const totalMs = retrievalMs + generationMs;
 
@@ -104,10 +106,18 @@ async function answerQuestion({ query, topK = 3 }) {
         }
     }
 
-    // 5. Safe Logging (No secret or full prompt leaks)
-    console.log(
-        `[RAG Tutor] Answer generated | queryLen=${trimmedQuery.length} | topK=${cleanTopK} | chunks=${retrievedChunks.length} | sources=[${sources.map(s => s.problemId).join(",")}] | latency={retrieval: ${retrievalMs}ms, gen: ${generationMs}ms, total: ${totalMs}ms}`
-    );
+    // 5. Safe Structured Logging (No secret, code, or prompt leaks)
+    logger.info("RAG Tutor answer completed", {
+        operation: "rag_tutor",
+        queryLength: trimmedQuery.length,
+        topK: cleanTopK,
+        retrievedCount: retrievedChunks.length,
+        sourcesCount: sources.length,
+        retrievalMs,
+        generationMs,
+        totalMs,
+        requestId
+    });
 
     return {
         answer: completion.text,

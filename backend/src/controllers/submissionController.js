@@ -1,7 +1,11 @@
 const pool = require("../config/db");
 const { publishToQueue } = require("../config/rabbitmq");
+const { config } = require("../config/env");
 
-const createSubmission = async (req, res) => {
+const createSubmission = async (req, res, next) => {
+    const requestId = req.requestId || "unknown";
+    const reqLogger = req.logger;
+
     try {
         const {
             problemId,
@@ -11,7 +15,8 @@ const createSubmission = async (req, res) => {
 
         if (!problemId || !language || !sourceCode) {
             return res.status(400).json({
-                message: "problemId, language and sourceCode are required"
+                message: "problemId, language and sourceCode are required",
+                requestId
             });
         }
 
@@ -23,7 +28,8 @@ const createSubmission = async (req, res) => {
 
         if (problem.rows.length === 0) {
             return res.status(404).json({
-                message: "Problem not found"
+                message: "Problem not found",
+                requestId
             });
         }
 
@@ -39,30 +45,47 @@ const createSubmission = async (req, res) => {
 
         const submission = result.rows[0];
 
-        // Publish job to RabbitMQ queue 'code-execution'
+        reqLogger.info("Submission created", {
+            submissionId: submission.id,
+            problemId,
+            language,
+            status: "PENDING"
+        });
+
+        // Publish job to RabbitMQ queue with correlated requestId
         try {
-            await publishToQueue("code-execution", {
-                submissionId: submission.id
+            const queueName = config.rabbitmq.queueName;
+            await publishToQueue(queueName, {
+                submissionId: submission.id,
+                requestId
+            });
+
+            reqLogger.info("Submission job published to RabbitMQ", {
+                submissionId: submission.id,
+                queue: queueName
             });
         } catch (queueError) {
-            console.error("Failed to publish submission job to RabbitMQ:", queueError.message);
+            reqLogger.error("Failed to publish submission job to RabbitMQ", {
+                submissionId: submission.id,
+                error: queueError.message
+            });
             return res.status(500).json({
-                message: "Submission saved but failed to queue execution job"
+                message: "Submission saved but failed to queue execution job",
+                requestId
             });
         }
 
         res.status(201).json(submission);
 
     } catch (error) {
-        console.error(error);
-
-        res.status(500).json({
-            message: "Failed to create submission"
-        });
+        next(error);
     }
 };
 
-const getSubmissionById = async (req, res) => {
+const getSubmissionById = async (req, res, next) => {
+    const requestId = req.requestId || "unknown";
+    const reqLogger = req.logger;
+
     try {
         const { id } = req.params;
 
@@ -75,18 +98,21 @@ const getSubmissionById = async (req, res) => {
 
         if (result.rows.length === 0) {
             return res.status(404).json({
-                message: "Submission not found"
+                message: "Submission not found",
+                requestId
             });
         }
 
-        res.json(result.rows[0]);
+        const submission = result.rows[0];
+        reqLogger.debug("Fetched submission details", {
+            submissionId: id,
+            status: submission.status
+        });
+
+        res.json(submission);
 
     } catch (error) {
-        console.error(error);
-
-        res.status(500).json({
-            message: "Failed to fetch submission"
-        });
+        next(error);
     }
 };
 

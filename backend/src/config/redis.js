@@ -1,13 +1,15 @@
 const { createClient } = require("redis");
+const { config } = require("./env");
+const { logger } = require("../utils/logger");
 
-const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+const redisUrl = config.redis.url;
 
 const redisClient = createClient({
     url: redisUrl,
     disableOfflineQueue: true,
     socket: {
         reconnectStrategy: (retries) => {
-            // Reconnect with exponential backoff up to 3000ms
+            // Exponential backoff up to 3000ms
             const delay = Math.min(retries * 100, 3000);
             return delay;
         }
@@ -15,35 +17,35 @@ const redisClient = createClient({
 });
 
 redisClient.on("error", (err) => {
-    // Log unexpected errors without crashing Express
-    console.error("Redis Client Error:", err.message || err);
+    logger.warn("Redis client warning/error (fallback mode available)", {
+        error: err.message || String(err)
+    });
 });
 
 redisClient.on("connect", () => {
-    // Socket connected
+    logger.debug("Redis socket connected");
 });
 
 redisClient.on("ready", () => {
-    // Ready to execute commands
+    logger.info("Redis client connected and ready");
 });
 
 redisClient.on("reconnecting", () => {
-    // Reconnecting to Redis
+    logger.warn("Redis client reconnecting...");
 });
-
-let isConnected = false;
 
 const connectRedis = async () => {
     try {
         if (!redisClient.isOpen) {
             await redisClient.connect();
-            isConnected = true;
-            console.log("Connected to Redis");
         }
         return redisClient;
     } catch (error) {
-        console.error("Failed to connect to Redis:", error.message);
-        throw error;
+        logger.warn("Initial Redis connection failed, running with in-memory/DB fallback", {
+            error: error.message
+        });
+        // We do not throw here to allow graceful startup even if Redis is initially down
+        return redisClient;
     }
 };
 
@@ -55,9 +57,21 @@ const isRedisReady = () => {
     return Boolean(redisClient && redisClient.isReady);
 };
 
+const closeRedis = async () => {
+    try {
+        if (redisClient && redisClient.isOpen) {
+            await redisClient.quit();
+            logger.info("Redis connection closed cleanly");
+        }
+    } catch (err) {
+        logger.error("Error closing Redis connection", { error: err.message });
+    }
+};
+
 module.exports = {
     redisClient,
     connectRedis,
     getRedisClient,
-    isRedisReady
+    isRedisReady,
+    closeRedis
 };

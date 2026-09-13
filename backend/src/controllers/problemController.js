@@ -6,15 +6,20 @@ const {
     setCachedProblemById
 } = require("../services/cache/problemCache");
 
-const getAllProblems = async (req, res) => {
+const getAllProblems = async (req, res, next) => {
+    const requestId = req.requestId || "unknown";
+    const reqLogger = req.logger;
+
     try {
         // 1. Check Redis Cache
         const cachedProblems = await getCachedAllProblems();
         if (cachedProblems) {
+            reqLogger.debug("Serving all problems from Redis cache", { count: cachedProblems.length });
             return res.json(cachedProblems);
         }
 
         // 2. Fallback / Cache Miss: Query PostgreSQL
+        reqLogger.debug("Querying all problems from PostgreSQL");
         const result = await pool.query(
             `SELECT id, title, difficulty, description, topic, expected_time_complexity, expected_space_complexity
              FROM problems
@@ -27,25 +32,26 @@ const getAllProblems = async (req, res) => {
         res.json(result.rows);
 
     } catch (error) {
-        console.error("Failed to fetch all problems:", error);
-
-        res.status(500).json({
-            message: "Failed to fetch problems"
-        });
+        next(error);
     }
 };
 
-const getProblemById = async (req, res) => {
+const getProblemById = async (req, res, next) => {
+    const requestId = req.requestId || "unknown";
+    const reqLogger = req.logger;
+
     try {
         const { id } = req.params;
 
         // 1. Check Redis Cache
         const cachedProblem = await getCachedProblemById(id);
         if (cachedProblem) {
+            reqLogger.debug("Serving problem from Redis cache", { problemId: id });
             return res.json(cachedProblem);
         }
 
         // 2. Fallback / Cache Miss: Query PostgreSQL
+        reqLogger.debug("Querying problem from PostgreSQL", { problemId: id });
         const result = await pool.query(
             `SELECT *
              FROM problems
@@ -55,7 +61,8 @@ const getProblemById = async (req, res) => {
 
         if (result.rows.length === 0) {
             return res.status(404).json({
-                message: "Problem not found"
+                message: "Problem not found",
+                requestId
             });
         }
 
@@ -67,11 +74,7 @@ const getProblemById = async (req, res) => {
         res.json(problem);
 
     } catch (error) {
-        console.error("Failed to fetch problem by ID:", error);
-
-        res.status(500).json({
-            message: "Failed to fetch problem"
-        });
+        next(error);
     }
 };
 
