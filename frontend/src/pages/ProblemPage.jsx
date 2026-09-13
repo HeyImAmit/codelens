@@ -8,7 +8,7 @@ import OutputPanel from '../components/OutputPanel';
 import AITutorPanel from '../components/ai/AITutorPanel';
 import SkeletonLoader from '../components/SkeletonLoader';
 import ErrorState from '../components/ErrorState';
-import { ArrowLeft, Terminal, Sparkles } from 'lucide-react';
+import { ArrowLeft, Terminal, Sparkles, SlidersHorizontal } from 'lucide-react';
 import './ProblemPage.css';
 
 // Default starter templates
@@ -73,6 +73,113 @@ export default function ProblemPage() {
   const pollingTimerRef = useRef(null);
   const activeSubmissionIdRef = useRef(null);
   const consecutiveFailuresRef = useRef(0);
+
+  // Resizable Layout Split States
+  const [leftWidthPercent, setLeftWidthPercent] = useState(42);
+  const [bottomHeightPercent, setBottomHeightPercent] = useState(38);
+  const [isDraggingCol, setIsDraggingCol] = useState(false);
+  const [isDraggingRow, setIsDraggingRow] = useState(false);
+
+  const layoutRef = useRef(null);
+  const rightPaneRef = useRef(null);
+
+  // Reset split proportions to default
+  const resetHorizontalSplit = useCallback(() => setLeftWidthPercent(42), []);
+  const resetVerticalSplit = useCallback(() => setBottomHeightPercent(38), []);
+  const resetAllSplits = useCallback(() => {
+    setLeftWidthPercent(42);
+    setBottomHeightPercent(38);
+  }, []);
+
+  // Horizontal column dragging handlers (Problem vs Editor)
+  const handleColPointerDown = useCallback((e) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDraggingCol(true);
+  }, []);
+
+  const handleColPointerMove = useCallback((e) => {
+    if (!isDraggingCol || !layoutRef.current) return;
+    const rect = layoutRef.current.getBoundingClientRect();
+    const totalWidth = rect.width;
+    if (totalWidth <= 0) return;
+
+    const currentX = e.clientX - rect.left;
+    const minLeftPx = 280;
+    const minRightPx = 380;
+    const clampedX = Math.max(minLeftPx, Math.min(totalWidth - minRightPx, currentX));
+    const newPercent = (clampedX / totalWidth) * 100;
+    setLeftWidthPercent(Math.max(20, Math.min(75, newPercent)));
+  }, [isDraggingCol]);
+
+  const handleColPointerUp = useCallback((e) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+    setIsDraggingCol(false);
+  }, []);
+
+  // Vertical row dragging handlers (Editor vs Bottom Panel)
+  const handleRowPointerDown = useCallback((e) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDraggingRow(true);
+  }, []);
+
+  const handleRowPointerMove = useCallback((e) => {
+    if (!isDraggingRow || !rightPaneRef.current) return;
+    const rect = rightPaneRef.current.getBoundingClientRect();
+    const totalHeight = rect.height;
+    if (totalHeight <= 0) return;
+
+    const bottomPx = rect.bottom - e.clientY;
+    const minTopPx = 180;
+    const minBottomPx = 130;
+    const clampedBottomPx = Math.max(minBottomPx, Math.min(totalHeight - minTopPx, bottomPx));
+    const newPercent = (clampedBottomPx / totalHeight) * 100;
+    setBottomHeightPercent(Math.max(18, Math.min(70, newPercent)));
+  }, [isDraggingRow]);
+
+  const handleRowPointerUp = useCallback((e) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+    setIsDraggingRow(false);
+  }, []);
+
+  // Keyboard Accessibility for Column Divider
+  const handleColKeyDown = useCallback((e) => {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      setLeftWidthPercent((prev) => Math.max(20, prev - 2));
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      setLeftWidthPercent((prev) => Math.min(75, prev + 2));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      setLeftWidthPercent(20);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      setLeftWidthPercent(75);
+    }
+  }, []);
+
+  // Keyboard Accessibility for Row Divider
+  const handleRowKeyDown = useCallback((e) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setBottomHeightPercent((prev) => Math.min(70, prev + 2));
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setBottomHeightPercent((prev) => Math.max(18, prev - 2));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      setBottomHeightPercent(18);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      setBottomHeightPercent(70);
+    }
+  }, []);
 
   // Helper to safely clear any active polling timer
   const clearPollingTimer = useCallback(() => {
@@ -273,19 +380,64 @@ export default function ProblemPage() {
           <span className="subnav-divider">/</span>
           <span className="subnav-title">{problem.title}</span>
         </div>
+        <div className="subnav-right">
+          <button
+            className="subnav-reset-layout-btn"
+            onClick={resetAllSplits}
+            title="Reset workspace split layout to defaults (Double click dividers to reset individually)"
+            aria-label="Reset workspace split layout"
+          >
+            <SlidersHorizontal size={12} />
+            <span>Reset Layout</span>
+          </button>
+        </div>
       </header>
 
       {/* Main Workspace Split Layout */}
-      <div className="workspace-main-layout">
+      <div
+        ref={layoutRef}
+        className={`workspace-main-layout ${isDraggingCol ? 'is-dragging-col' : ''} ${isDraggingRow ? 'is-dragging-row' : ''}`}
+      >
         {/* Left Pane: Problem Description */}
-        <div className="workspace-pane left-description-pane">
+        <div
+          className="workspace-pane left-description-pane"
+          style={{ width: `${leftWidthPercent}%` }}
+        >
           <ProblemDescription problem={problem} />
         </div>
 
+        {/* Horizontal Drag Handle (Column Divider) */}
+        <div
+          className={`workspace-divider-col ${isDraggingCol ? 'active' : ''}`}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize left problem description and right editor panes"
+          aria-valuenow={Math.round(leftWidthPercent)}
+          aria-valuemin={20}
+          aria-valuemax={75}
+          tabIndex={0}
+          onPointerDown={handleColPointerDown}
+          onPointerMove={handleColPointerMove}
+          onPointerUp={handleColPointerUp}
+          onPointerCancel={handleColPointerUp}
+          onDoubleClick={resetHorizontalSplit}
+          onKeyDown={handleColKeyDown}
+          title="Drag left/right to resize columns (Double click to reset)"
+        >
+          <div className="divider-grip-col" />
+        </div>
+
         {/* Right Pane: Editor & Output/Analysis */}
-        <div className="workspace-pane right-editor-pane">
+        <div
+          ref={rightPaneRef}
+          className="workspace-pane right-editor-pane"
+          style={{ width: `calc(100% - ${leftWidthPercent}% - 6px)` }}
+        >
           {/* Top Section: Editor Container */}
-          <div className="editor-panel-box">
+          <div
+            className="editor-panel-box"
+            style={{ height: `calc(100% - ${bottomHeightPercent}% - 6px)` }}
+          >
             <WorkspaceToolbar
               language={language}
               onLanguageChange={setLanguage}
@@ -305,8 +457,32 @@ export default function ProblemPage() {
             </div>
           </div>
 
+          {/* Vertical Drag Handle (Row Divider) */}
+          <div
+            className={`workspace-divider-row ${isDraggingRow ? 'active' : ''}`}
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize top editor and bottom output/AI panels"
+            aria-valuenow={Math.round(bottomHeightPercent)}
+            aria-valuemin={18}
+            aria-valuemax={70}
+            tabIndex={0}
+            onPointerDown={handleRowPointerDown}
+            onPointerMove={handleRowPointerMove}
+            onPointerUp={handleRowPointerUp}
+            onPointerCancel={handleRowPointerUp}
+            onDoubleClick={resetVerticalSplit}
+            onKeyDown={handleRowKeyDown}
+            title="Drag up/down to resize bottom panel (Double click to reset)"
+          >
+            <div className="divider-grip-row" />
+          </div>
+
           {/* Bottom Section: Tabbed Output / CodeLens Analysis */}
-          <div className="bottom-panel-box">
+          <div
+            className="bottom-panel-box"
+            style={{ height: `${bottomHeightPercent}%` }}
+          >
             {/* Bottom Tab Switcher */}
             <div className="bottom-panel-nav">
               <button
