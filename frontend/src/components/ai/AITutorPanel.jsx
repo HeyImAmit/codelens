@@ -5,11 +5,13 @@ import CodeReviewCard from './CodeReviewCard';
 import TutorInput from './TutorInput';
 import './AITutorPanel.css';
 
-export default function AITutorPanel({ problem, language, sourceCode }) {
+export default function AITutorPanel({ problem, problemId, language, sourceCode }) {
   // AI Sub-tabs: 'hints' | 'review' | 'tutor'
   const [activeTab, setActiveTab] = useState('hints');
 
-  if (!problem) {
+  const effectiveProblemId = Number(problemId || problem?.id || problem?.problem_id);
+
+  if (!problem && !effectiveProblemId) {
     return (
       <div className="ai-panel-empty">
         <Bot size={24} className="ai-empty-icon" />
@@ -64,29 +66,30 @@ export default function AITutorPanel({ problem, language, sourceCode }) {
         </div>
       </div>
 
-      {/* Main Panel Viewport */}
+      {/* Main Panel Viewport with state preservation across tabs */}
       <div className="ai-panel-viewport">
-        {activeTab === 'hints' && (
+        <div className={`ai-tab-pane ${activeTab === 'hints' ? 'active' : 'hidden'}`} role="tabpanel">
           <HintCard
-            problemId={problem.id}
+            problemId={effectiveProblemId}
+            problemTitle={problem?.title}
             sourceCode={sourceCode}
           />
-        )}
+        </div>
 
-        {activeTab === 'review' && (
+        <div className={`ai-tab-pane ${activeTab === 'review' ? 'active' : 'hidden'}`} role="tabpanel">
           <CodeReviewCard
-            problemId={problem.id}
+            problemId={effectiveProblemId}
             language={language}
             sourceCode={sourceCode}
           />
-        )}
+        </div>
 
-        {activeTab === 'tutor' && (
+        <div className={`ai-tab-pane ${activeTab === 'tutor' ? 'active' : 'hidden'}`} role="tabpanel">
           <TutorInput
-            problemTitle={problem.title}
-            problemTopic={problem.topic}
+            problemTitle={problem?.title}
+            problemTopic={problem?.topic}
           />
-        )}
+        </div>
       </div>
     </div>
   );

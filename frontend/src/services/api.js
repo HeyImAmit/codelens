@@ -144,10 +144,29 @@ export const getSubmissionById = async (id) => {
 };
 
 /**
- * Sends a question to the grounded RAG AI Tutor POST /api/ai/ask
- * @param {Object} payload - { query, topK }
+ * Helper to safely extract JSON or text error message from HTTP response
  */
-export const askTutor = async ({ query, topK = 3 }) => {
+const parseErrorMessage = async (response, defaultFallback) => {
+  try {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await response.json();
+      if (data && data.message) return data.message;
+    } else {
+      const text = await response.text();
+      if (text && text.length < 200 && !text.includes('<html')) return text.trim();
+    }
+  } catch (e) {
+    // ignore parse error
+  }
+  return defaultFallback;
+};
+
+/**
+ * Sends a question to the grounded RAG AI Tutor POST /api/ai/ask
+ * @param {Object} payload - { query, topK, signal }
+ */
+export const askTutor = async ({ query, topK = 3, signal = null }) => {
   try {
     const response = await fetch(`${API_BASE_URL}/ai/ask`, {
       method: 'POST',
@@ -159,35 +178,53 @@ export const askTutor = async ({ query, topK = 3 }) => {
         query: String(query).trim(),
         topK: Number(topK) || 3,
       }),
+      signal: signal || undefined,
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
       if (response.status === 400) {
-        throw new Error(errorData.message || 'Please enter a valid question for the tutor.');
+        const msg = await parseErrorMessage(response, 'Please enter a valid question for the tutor.');
+        throw new Error(msg);
       } else if (response.status === 404) {
-        throw new Error(errorData.message || 'The requested resource could not be found.');
+        const msg = await parseErrorMessage(response, 'The selected problem or AI resource could not be found.');
+        throw new Error(msg);
       } else if (response.status === 429) {
         throw new Error('AI rate limit reached. Please wait a moment before asking again.');
       } else if (response.status >= 500) {
-        throw new Error(errorData.message || 'AI Tutor service is temporarily unavailable. Please try again.');
+        const msg = await parseErrorMessage(response, 'AI Tutor service is temporarily unavailable. Please try again.');
+        throw new Error(msg);
       }
-      throw new Error(errorData.message || `AI Tutor request failed with status ${response.status}`);
+      const genericMsg = await parseErrorMessage(response, `AI Tutor request failed (Status ${response.status})`);
+      throw new Error(genericMsg);
     }
 
     return await response.json();
   } catch (error) {
-    console.error('API Error [askTutor]:', error);
+    if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+      const abortErr = new Error('Request was cancelled');
+      abortErr.name = 'AbortError';
+      abortErr.isAborted = true;
+      throw abortErr;
+    }
+    if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+      throw new Error('Unable to reach CodeLens backend. Please verify your network or server connection.');
+    }
+    console.error('API Error [askTutor]:', error.message);
     throw error;
   }
 };
 
 /**
  * Requests an AI code review for the current submission POST /api/ai/review
- * @param {Object} payload - { problemId, language, sourceCode }
+ * @param {Object} payload - { problemId, language, sourceCode, signal }
  */
-export const reviewCode = async ({ problemId, language, sourceCode }) => {
+export const reviewCode = async ({ problemId, language, sourceCode, signal = null }) => {
   try {
+    const numProblemId = Number(problemId);
+    if (!numProblemId || isNaN(numProblemId) || numProblemId <= 0) {
+      throw new Error('Valid numeric problem ID is required for code review.');
+    }
+
     const response = await fetch(`${API_BASE_URL}/ai/review`, {
       method: 'POST',
       headers: {
@@ -195,41 +232,59 @@ export const reviewCode = async ({ problemId, language, sourceCode }) => {
         'Accept': 'application/json',
       },
       body: JSON.stringify({
-        problemId: Number(problemId),
+        problemId: numProblemId,
         language: String(language).toLowerCase(),
         sourceCode: String(sourceCode),
       }),
+      signal: signal || undefined,
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
       if (response.status === 400) {
-        throw new Error(errorData.message || 'Invalid code review request parameters.');
+        const msg = await parseErrorMessage(response, 'Invalid code review parameters.');
+        throw new Error(msg);
       } else if (response.status === 404) {
-        throw new Error(errorData.message || 'The selected problem could not be found.');
+        const msg = await parseErrorMessage(response, 'The selected problem could not be found.');
+        throw new Error(msg);
       } else if (response.status === 429) {
         throw new Error('AI rate limit reached. Please wait a moment before requesting another review.');
       } else if (response.status >= 500) {
-        throw new Error(errorData.message || 'AI Code Review service is temporarily unavailable.');
+        const msg = await parseErrorMessage(response, 'AI Code Review service is temporarily unavailable.');
+        throw new Error(msg);
       }
-      throw new Error(errorData.message || `Code review failed with status ${response.status}`);
+      const genericMsg = await parseErrorMessage(response, `Code review failed (Status ${response.status})`);
+      throw new Error(genericMsg);
     }
 
     return await response.json();
   } catch (error) {
-    console.error('API Error [reviewCode]:', error);
+    if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+      const abortErr = new Error('Request was cancelled');
+      abortErr.name = 'AbortError';
+      abortErr.isAborted = true;
+      throw abortErr;
+    }
+    if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+      throw new Error('Unable to reach CodeLens backend. Please verify your network or server connection.');
+    }
+    console.error('API Error [reviewCode]:', error.message);
     throw error;
   }
 };
 
 /**
  * Requests a progressive AI hint for the selected problem POST /api/ai/hint
- * @param {Object} payload - { problemId, level, sourceCode, previousHints }
+ * @param {Object} payload - { problemId, level, sourceCode, previousHints, signal }
  */
-export const generateHint = async ({ problemId, level, sourceCode = null, previousHints = [] }) => {
+export const generateHint = async ({ problemId, level, sourceCode = null, previousHints = [], signal = null }) => {
   try {
+    const numProblemId = Number(problemId);
+    if (!numProblemId || isNaN(numProblemId) || numProblemId <= 0) {
+      throw new Error('Valid numeric problem ID is required to generate a hint.');
+    }
+
     const bodyPayload = {
-      problemId: Number(problemId),
+      problemId: numProblemId,
       level: Number(level),
     };
 
@@ -248,25 +303,38 @@ export const generateHint = async ({ problemId, level, sourceCode = null, previo
         'Accept': 'application/json',
       },
       body: JSON.stringify(bodyPayload),
+      signal: signal || undefined,
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
       if (response.status === 400) {
-        throw new Error(errorData.message || 'Invalid hint request parameters.');
+        const msg = await parseErrorMessage(response, 'Invalid hint request parameters.');
+        throw new Error(msg);
       } else if (response.status === 404) {
-        throw new Error(errorData.message || 'The selected problem could not be found.');
+        const msg = await parseErrorMessage(response, 'The selected problem could not be found.');
+        throw new Error(msg);
       } else if (response.status === 429) {
         throw new Error('AI rate limit reached. Please wait a moment before generating another hint.');
       } else if (response.status >= 500) {
-        throw new Error(errorData.message || 'AI Hint service is temporarily unavailable.');
+        const msg = await parseErrorMessage(response, 'AI Hint service is temporarily unavailable.');
+        throw new Error(msg);
       }
-      throw new Error(errorData.message || `Hint generation failed with status ${response.status}`);
+      const genericMsg = await parseErrorMessage(response, `Hint generation failed (Status ${response.status})`);
+      throw new Error(genericMsg);
     }
 
     return await response.json();
   } catch (error) {
-    console.error('API Error [generateHint]:', error);
+    if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+      const abortErr = new Error('Request was cancelled');
+      abortErr.name = 'AbortError';
+      abortErr.isAborted = true;
+      throw abortErr;
+    }
+    if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+      throw new Error('Unable to reach CodeLens backend. Please verify your network or server connection.');
+    }
+    console.error('API Error [generateHint]:', error.message);
     throw error;
   }
 };

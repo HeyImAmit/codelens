@@ -77,6 +77,19 @@
   position: relative;
 }
 
+.ai-tab-pane {
+  height: 100%;
+  width: 100%;
+}
+
+.ai-tab-pane.hidden {
+  display: none;
+}
+
+.ai-tab-pane.active {
+  display: block;
+}
+
 .ai-panel-empty {
   display: flex;
   flex-direction: column;

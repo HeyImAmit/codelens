@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Code2,
   Sparkles,
@@ -19,45 +19,95 @@ import AISourceList from './AISourceList';
 import './CodeReviewCard.css';
 
 export default function CodeReviewCard({ problemId, language, sourceCode }) {
-  const [reviewResult, setReviewResult] = useState(null);
+  const [reviewResult, setReviewResult] = useState(null); // { review, sources, timing, reviewedSnapshot: { code, language } }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const abortControllerRef = useRef(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
+
   const handleRunReview = async () => {
-    if (!problemId || loading) return;
+    const numProblemId = Number(problemId);
+    if (!numProblemId || isNaN(numProblemId) || numProblemId <= 0) {
+      setError('Invalid problem ID. Please reload the problem.');
+      return;
+    }
+
+    if (loading) return;
 
     if (!sourceCode || sourceCode.trim().length === 0) {
       setError('Please write some code in the editor before requesting a review.');
       return;
     }
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true);
     setError(null);
 
+    const snapshotCode = sourceCode;
+    const snapshotLang = language;
+
     try {
       const response = await reviewCode({
-        problemId,
-        language,
-        sourceCode,
+        problemId: numProblemId,
+        language: snapshotLang,
+        sourceCode: snapshotCode,
+        signal: controller.signal,
       });
+
+      if (!isMountedRef.current) return;
 
       if (response && response.success && response.review) {
         setReviewResult({
           review: response.review,
           sources: response.sources || [],
           timing: response.timing || null,
+          reviewedSnapshot: {
+            code: snapshotCode,
+            language: snapshotLang,
+          },
         });
+        setError(null);
       } else {
         throw new Error('Received invalid review payload from AI review service.');
       }
     } catch (err) {
-      setError(err.message || 'Failed to complete code review. Please try again.');
+      if (err.name === 'AbortError' || err.isAborted) {
+        return;
+      }
+      if (isMountedRef.current) {
+        setError(err.message || 'Failed to complete code review. Please try again.');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+        abortControllerRef.current = null;
+      }
     }
   };
 
   const review = reviewResult?.review;
+  const isStale = Boolean(
+    reviewResult &&
+    reviewResult.reviewedSnapshot &&
+    (sourceCode !== reviewResult.reviewedSnapshot.code || language !== reviewResult.reviewedSnapshot.language)
+  );
 
   const renderCorrectnessBadge = (assessment) => {
     const norm = String(assessment || '').toUpperCase();
@@ -149,6 +199,25 @@ export default function CodeReviewCard({ problemId, language, sourceCode }) {
               </button>
             </div>
           </div>
+
+          {/* Stale Review Banner if code/language changed */}
+          {isStale && (
+            <div className="review-stale-banner" role="status">
+              <div className="stale-banner-left">
+                <AlertTriangle size={14} className="stale-icon" />
+                <span>Review is based on an older version of your code.</span>
+              </div>
+              <button
+                className="review-updated-btn"
+                onClick={handleRunReview}
+                disabled={loading}
+                aria-label="Review updated code"
+              >
+                <RotateCcw size={12} />
+                <span>Review Updated Code</span>
+              </button>
+            </div>
+          )}
 
           {/* 1. Summary Card */}
           {review.summary && (

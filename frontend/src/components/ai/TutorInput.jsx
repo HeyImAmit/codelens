@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MessageSquare, Send, Sparkles, HelpCircle, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { MessageSquare, Send, Sparkles, HelpCircle, RotateCcw, BookOpen } from 'lucide-react';
 import { askTutor } from '../../services/api';
 import AILoading from './AILoading';
 import AISourceList from './AISourceList';
@@ -12,17 +12,37 @@ const QUICK_PROMPTS = [
   'Why does brute force fail on large inputs?',
 ];
 
-export default function TutorInput({ problemTitle, problemTopic }) {
+export default function TutorInput({ problemTitle = '', problemTopic = 'DSA' }) {
   const [query, setQuery] = useState('');
   const [activeQA, setActiveQA] = useState(null); // { question, answer, sources, timing }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const abortControllerRef = useRef(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleSubmit = async (e, customQuery = null) => {
     if (e && e.preventDefault) e.preventDefault();
 
     const targetQuery = (customQuery || query).trim();
     if (!targetQuery || loading) return;
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     setLoading(true);
     setError(null);
@@ -36,7 +56,10 @@ export default function TutorInput({ problemTitle, problemTopic }) {
       const response = await askTutor({
         query: contextualQuery,
         topK: 3,
+        signal: controller.signal,
       });
+
+      if (!isMountedRef.current) return;
 
       if (response && response.success && response.answer) {
         setActiveQA({
@@ -46,13 +69,22 @@ export default function TutorInput({ problemTitle, problemTopic }) {
           timing: response.timing || null,
         });
         setQuery('');
+        setError(null);
       } else {
         throw new Error('Received invalid response from AI Tutor service.');
       }
     } catch (err) {
-      setError(err.message || 'Failed to get answer from AI Tutor. Please try again.');
+      if (err.name === 'AbortError' || err.isAborted) {
+        return;
+      }
+      if (isMountedRef.current) {
+        setError(err.message || 'Failed to get answer from AI Tutor. Please try again.');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+        abortControllerRef.current = null;
+      }
     }
   };
 

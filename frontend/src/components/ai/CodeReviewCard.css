@@ -102,6 +102,54 @@
   cursor: pointer;
 }
 
+/* Stale Review Banner */
+.review-stale-banner {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: #fbbf24;
+  animation: aiFadeIn 200ms ease-out forwards;
+}
+
+.stale-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.stale-icon {
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+
+.review-updated-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.review-updated-btn:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.3);
+  color: #ffffff;
+}
+
 /* Results Wrapper */
 .review-results-wrapper {
   display: flex;

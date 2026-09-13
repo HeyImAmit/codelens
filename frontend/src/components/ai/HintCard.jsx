@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Lightbulb, ArrowRight, RotateCcw, Sparkles, CheckCircle2, ChevronRight, Layers } from 'lucide-react';
 import { generateHint } from '../../services/api';
 import AILoading from './AILoading';
@@ -12,16 +12,45 @@ const LEVEL_LABELS = {
   4: { title: 'Detailed Explanation', desc: 'Walks through near-complete logic & complexity' },
 };
 
-export default function HintCard({ problemId, sourceCode }) {
+export default function HintCard({ problemId, problemTitle = '', sourceCode }) {
   const [currentLevel, setCurrentLevel] = useState(0); // 0 = no hint generated yet
   const [hintHistory, setHintHistory] = useState([]); // array of { level, hint, concept, nextStep, sources, timing }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const abortControllerRef = useRef(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
+
   const fetchNextHint = async () => {
-    if (!problemId || loading || currentLevel >= 4) return;
+    const numProblemId = Number(problemId);
+    if (!numProblemId || isNaN(numProblemId) || numProblemId <= 0) {
+      setError('Invalid problem ID. Please reload the problem.');
+      return;
+    }
+
+    if (loading || currentLevel >= 4) return;
 
     const nextLevel = currentLevel + 1;
+    if (nextLevel > 4) return;
+
+    // Abort previous active request if any
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true);
     setError(null);
 
@@ -30,11 +59,14 @@ export default function HintCard({ problemId, sourceCode }) {
 
     try {
       const response = await generateHint({
-        problemId,
+        problemId: numProblemId,
         level: nextLevel,
-        sourceCode: sourceCode && sourceCode.trim().length > 0 ? sourceCode : null,
+        sourceCode: sourceCode && typeof sourceCode === 'string' && sourceCode.trim().length > 0 ? sourceCode.trim() : null,
         previousHints,
+        signal: controller.signal,
       });
+
+      if (!isMountedRef.current) return;
 
       if (response && response.success && response.hint) {
         setHintHistory((prev) => [...prev, {
@@ -43,20 +75,35 @@ export default function HintCard({ problemId, sourceCode }) {
           timing: response.timing || null,
         }]);
         setCurrentLevel(nextLevel);
+        setError(null);
       } else {
         throw new Error('Received unexpected response format from hint service.');
       }
     } catch (err) {
-      setError(err.message || 'Failed to generate hint. Please try again.');
+      if (err.name === 'AbortError' || err.isAborted) {
+        // Request was cancelled; do not display error
+        return;
+      }
+      if (isMountedRef.current) {
+        setError(err.message || 'Failed to generate hint. Please try again.');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+        abortControllerRef.current = null;
+      }
     }
   };
 
   const handleReset = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     setCurrentLevel(0);
     setHintHistory([]);
     setError(null);
+    setLoading(false);
   };
 
   const latestHint = hintHistory.length > 0 ? hintHistory[hintHistory.length - 1] : null;

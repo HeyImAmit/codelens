@@ -339,7 +339,9 @@ export default function ProblemPage() {
                 />
               ) : (
                 <AITutorPanel
+                  key={problem?.id || id}
                   problem={problem}
+                  problemId={problem?.id || id}
                   language={language}
                   sourceCode={codeByLanguage[language]}
                 />
