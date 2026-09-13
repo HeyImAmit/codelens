@@ -1,0 +1,79 @@
+.ai-sources-section {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ai-sources-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.ai-sources-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.source-icon {
+  color: var(--accent-primary);
+}
+
+.ai-timing-badge {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  background: var(--bg-surface-elevated);
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-subtle);
+}
+
+.ai-sources-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.source-link-icon {
+  color: var(--text-dim);
+}
+
+.source-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.source-topic-tag {
+  font-size: 0.68rem;
+  padding: 1px 5px;
+  background: rgba(139, 92, 246, 0.1);
+  color: #a78bfa;
+  border-radius: var(--radius-xs);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.source-similarity-badge {
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}

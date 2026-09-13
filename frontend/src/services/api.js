@@ -143,4 +143,130 @@ export const getSubmissionById = async (id) => {
   }
 };
 
+/**
+ * Sends a question to the grounded RAG AI Tutor POST /api/ai/ask
+ * @param {Object} payload - { query, topK }
+ */
+export const askTutor = async ({ query, topK = 3 }) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/ai/ask`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        query: String(query).trim(),
+        topK: Number(topK) || 3,
+      }),
+    });
 
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      if (response.status === 400) {
+        throw new Error(errorData.message || 'Please enter a valid question for the tutor.');
+      } else if (response.status === 404) {
+        throw new Error(errorData.message || 'The requested resource could not be found.');
+      } else if (response.status === 429) {
+        throw new Error('AI rate limit reached. Please wait a moment before asking again.');
+      } else if (response.status >= 500) {
+        throw new Error(errorData.message || 'AI Tutor service is temporarily unavailable. Please try again.');
+      }
+      throw new Error(errorData.message || `AI Tutor request failed with status ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('API Error [askTutor]:', error);
+    throw error;
+  }
+};
+
+/**
+ * Requests an AI code review for the current submission POST /api/ai/review
+ * @param {Object} payload - { problemId, language, sourceCode }
+ */
+export const reviewCode = async ({ problemId, language, sourceCode }) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/ai/review`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        problemId: Number(problemId),
+        language: String(language).toLowerCase(),
+        sourceCode: String(sourceCode),
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      if (response.status === 400) {
+        throw new Error(errorData.message || 'Invalid code review request parameters.');
+      } else if (response.status === 404) {
+        throw new Error(errorData.message || 'The selected problem could not be found.');
+      } else if (response.status === 429) {
+        throw new Error('AI rate limit reached. Please wait a moment before requesting another review.');
+      } else if (response.status >= 500) {
+        throw new Error(errorData.message || 'AI Code Review service is temporarily unavailable.');
+      }
+      throw new Error(errorData.message || `Code review failed with status ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('API Error [reviewCode]:', error);
+    throw error;
+  }
+};
+
+/**
+ * Requests a progressive AI hint for the selected problem POST /api/ai/hint
+ * @param {Object} payload - { problemId, level, sourceCode, previousHints }
+ */
+export const generateHint = async ({ problemId, level, sourceCode = null, previousHints = [] }) => {
+  try {
+    const bodyPayload = {
+      problemId: Number(problemId),
+      level: Number(level),
+    };
+
+    if (sourceCode && typeof sourceCode === 'string' && sourceCode.trim().length > 0) {
+      bodyPayload.sourceCode = sourceCode;
+    }
+
+    if (Array.isArray(previousHints) && previousHints.length > 0) {
+      bodyPayload.previousHints = previousHints;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/ai/hint`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(bodyPayload),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      if (response.status === 400) {
+        throw new Error(errorData.message || 'Invalid hint request parameters.');
+      } else if (response.status === 404) {
+        throw new Error(errorData.message || 'The selected problem could not be found.');
+      } else if (response.status === 429) {
+        throw new Error('AI rate limit reached. Please wait a moment before generating another hint.');
+      } else if (response.status >= 500) {
+        throw new Error(errorData.message || 'AI Hint service is temporarily unavailable.');
+      }
+      throw new Error(errorData.message || `Hint generation failed with status ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('API Error [generateHint]:', error);
+    throw error;
+  }
+};

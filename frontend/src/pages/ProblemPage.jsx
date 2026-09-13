@@ -5,7 +5,7 @@ import ProblemDescription from '../components/ProblemDescription';
 import WorkspaceToolbar from '../components/WorkspaceToolbar';
 import CodeEditor from '../components/CodeEditor';
 import OutputPanel from '../components/OutputPanel';
-import CodeLensAnalysisPanel from '../components/CodeLensAnalysisPanel';
+import AITutorPanel from '../components/ai/AITutorPanel';
 import SkeletonLoader from '../components/SkeletonLoader';
 import ErrorState from '../components/ErrorState';
 import { ArrowLeft, Terminal, Sparkles } from 'lucide-react';
@@ -312,16 +312,18 @@ export default function ProblemPage() {
               <button
                 className={`bottom-tab-btn ${bottomTab === 'output' ? 'active' : ''}`}
                 onClick={() => setBottomTab('output')}
+                aria-label="View execution test output"
               >
                 <Terminal size={13} />
                 <span>Execution Output</span>
               </button>
               <button
-                className={`bottom-tab-btn ${bottomTab === 'analysis' ? 'active' : ''}`}
-                onClick={() => setBottomTab('analysis')}
+                className={`bottom-tab-btn ${bottomTab === 'ai' || bottomTab === 'analysis' ? 'active' : ''}`}
+                onClick={() => setBottomTab('ai')}
+                aria-label="View CodeLens AI features"
               >
                 <Sparkles size={13} />
-                <span>CodeLens Analysis</span>
+                <span>CodeLens AI</span>
               </button>
             </div>
 
@@ -336,9 +338,10 @@ export default function ProblemPage() {
                   isPolling={isPolling}
                 />
               ) : (
-                <CodeLensAnalysisPanel
-                  submissionResult={submissionResult}
-                  isEvaluating={isPolling || executionState === 'running'}
+                <AITutorPanel
+                  problem={problem}
+                  language={language}
+                  sourceCode={codeByLanguage[language]}
                 />
               )}
             </div>
